@@ -1,5 +1,5 @@
-// Using Gemini embedding (3072 dimensions)
-const EMBEDDING_MODEL = 'gemini-embedding-001'
+// Using Gemini Embedding 2 (3072 dimensions, 8K token limit)
+const EMBEDDING_MODEL = 'gemini-embedding-2-preview'
 
 export async function getEmbedding(text: string): Promise<number[]> {
   // Truncate to ~8000 chars to stay within token limits
