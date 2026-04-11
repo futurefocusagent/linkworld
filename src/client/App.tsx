@@ -410,7 +410,6 @@ function LinkCard({
               height: 120,
               objectFit: 'cover',
               background: '#000',
-              filter: 'grayscale(100%)',
             }}
             onError={e => (e.currentTarget.style.display = 'none')}
           />
