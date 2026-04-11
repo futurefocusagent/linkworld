@@ -13,7 +13,7 @@ import { scrapeUrl } from './firecrawl.js'
 import { embedDocument, embedQuery } from './embeddings.js'
 import { autoTagLink } from './tagger.js'
 import { generateTitle } from './titlegen.js'
-import { initImageStorage, downloadAndSaveImage, extractFirstImage, getImageUrl, getStorageDir } from './images.js'
+import { initImageStorage, downloadAndSaveImage, extractFirstImage, getImageUrl, getStorageDir, generatePlaceholder } from './images.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -45,15 +45,18 @@ app.post('/api/links', async (req, res) => {
       console.log(`  Scraped: ${title}`)
     }
 
-    // 3. Download and save image (OG image or first content image)
+    // 3. Download and save image (OG image or first content image, fallback to placeholder)
     let savedImage: string | null = null
     const imageUrl = scraped.ogImage || extractFirstImage(scraped.markdown)
     if (imageUrl) {
       console.log(`  Downloading image: ${imageUrl.slice(0, 60)}...`)
       savedImage = await downloadAndSaveImage(imageUrl)
-      if (savedImage) {
-        console.log(`  Saved image: ${savedImage}`)
-      }
+    }
+    
+    // Generate placeholder if no image could be downloaded
+    if (!savedImage) {
+      console.log('  No image available, generating placeholder...')
+      savedImage = generatePlaceholder(title, url)
     }
 
     // 4. Generate embedding from markdown content (RETRIEVAL_DOCUMENT for storage)
@@ -319,26 +322,26 @@ app.post('/api/admin/backfill-images', async (req, res) => {
       // Try OG image first, then first content image
       const imageUrl = (fullLink as any).og_image || extractFirstImage((fullLink as any).markdown || '')
       
-      if (!imageUrl) {
-        results.push({ id: link.id, title: link.title, result: 'no image found' })
-        continue
+      let savedImage: string | null = null
+      
+      if (imageUrl && !imageUrl.startsWith('/images/')) {
+        savedImage = await downloadAndSaveImage(imageUrl)
       }
       
-      // Download and save
-      const savedImage = await downloadAndSaveImage(imageUrl)
-      if (savedImage) {
-        // Update database
-        const { Pool } = await import('pg')
-        const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
-        await pool.query(
-          'UPDATE linkworld.links SET og_image = $1 WHERE id = $2',
-          [getImageUrl(savedImage), link.id]
-        )
-        await pool.end()
-        results.push({ id: link.id, title: link.title, result: `saved: ${savedImage}` })
-      } else {
-        results.push({ id: link.id, title: link.title, result: 'download failed' })
+      // Generate placeholder if no image could be downloaded
+      if (!savedImage) {
+        savedImage = generatePlaceholder(link.title, link.url)
       }
+      
+      // Update database
+      const { Pool } = await import('pg')
+      const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+      await pool.query(
+        'UPDATE linkworld.links SET og_image = $1 WHERE id = $2',
+        [getImageUrl(savedImage), link.id]
+      )
+      await pool.end()
+      results.push({ id: link.id, title: link.title, result: `saved: ${savedImage}` })
     }
     
     res.json({ ok: true, results })
