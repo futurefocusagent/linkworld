@@ -21,6 +21,7 @@ export interface ScrapedContent {
   ogTitle?: string
   ogDescription?: string
   ogImage?: string
+  needsGeneratedTitle?: boolean
 }
 
 export async function scrapeUrl(url: string): Promise<ScrapedContent> {
@@ -44,11 +45,14 @@ export async function scrapeUrl(url: string): Promise<ScrapedContent> {
 
   const meta = data.data.metadata || {}
   
+  const hasTitle = meta.title || meta['og:title'] || meta.ogTitle
+  
   return {
     markdown: data.data.markdown,
-    title: meta.title || meta['og:title'] || meta.ogTitle || url,
+    title: hasTitle ? String(meta.title || meta['og:title'] || meta.ogTitle) : '', // Empty if no title, will be generated
     ogTitle: meta['og:title'] || meta.ogTitle,
     ogDescription: meta['og:description'] || meta.ogDescription,
     ogImage: meta['og:image'] || meta.ogImage,
+    needsGeneratedTitle: !hasTitle,
   }
 }

@@ -6,11 +6,13 @@ import {
   initDb, insertLink, getLinksChronological, searchLinks,
   findSimilarToLink, getLinkById, getLinkCount,
   getAllTags, getLinkTags, setLinkTags, resolveTag,
-  searchTagsByName, deleteTag, mergeTags, getLinksByTag
+  searchTagsByName, deleteTag, mergeTags, getLinksByTag,
+  getTagById, findLinksSimilarToTag
 } from './db.js'
 import { scrapeUrl } from './firecrawl.js'
 import { embedDocument, embedQuery } from './embeddings.js'
 import { autoTagLink } from './tagger.js'
+import { generateTitle } from './titlegen.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -31,17 +33,26 @@ app.post('/api/links', async (req, res) => {
 
     // 1. Scrape with Firecrawl
     const scraped = await scrapeUrl(url)
-    console.log(`  Scraped: ${scraped.title}`)
+    
+    // 2. Generate title if needed (PDFs, etc.)
+    let title = scraped.title
+    if (scraped.needsGeneratedTitle || !title) {
+      console.log('  No title found, generating...')
+      title = await generateTitle(scraped.markdown, url)
+      console.log(`  Generated title: ${title}`)
+    } else {
+      console.log(`  Scraped: ${title}`)
+    }
 
-    // 2. Generate embedding from markdown content (RETRIEVAL_DOCUMENT for storage)
-    const textForEmbedding = `${scraped.title}\n\n${scraped.ogDescription || ''}\n\n${scraped.markdown}`
+    // 3. Generate embedding from markdown content (RETRIEVAL_DOCUMENT for storage)
+    const textForEmbedding = `${title}\n\n${scraped.ogDescription || ''}\n\n${scraped.markdown}`
     const embedding = await embedDocument(textForEmbedding)
     console.log(`  Embedding: ${embedding.length} dimensions`)
 
-    // 3. Save to database
+    // 4. Save to database
     const link = await insertLink({
       url,
-      title: scraped.title,
+      title,
       markdown: scraped.markdown,
       ogTitle: scraped.ogTitle,
       ogDescription: scraped.ogDescription,
@@ -50,8 +61,8 @@ app.post('/api/links', async (req, res) => {
     })
     console.log(`  Saved as ID: ${link.id}`)
 
-    // 4. Auto-generate tags (async, don't block response)
-    autoTagLink(link.id, scraped.title, scraped.markdown)
+    // 5. Auto-generate tags (async, don't block response)
+    autoTagLink(link.id, title, scraped.markdown)
       .then(result => console.log(`  Tagged with ${result.tags.length} tags:`, result.tags.map(t => t.name)))
       .catch(err => console.error('  Auto-tagging failed:', err))
 
@@ -189,6 +200,55 @@ app.get('/api/tags', async (req, res) => {
       tags = await getAllTags()
     }
     res.json({ tags })
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message })
+  }
+})
+
+// Get tag detail with exact matches and semantically similar links
+app.get('/api/tags/:id', async (req, res) => {
+  try {
+    const tagId = parseInt(req.params.id, 10)
+    const tag = await getTagById(tagId)
+    if (!tag) {
+      return res.status(404).json({ error: 'Tag not found' })
+    }
+
+    // Get exact matches (links explicitly tagged)
+    const exactMatches = await getLinksByTag(tagId, 50)
+    const exactMatchIds = exactMatches.map(l => l.id)
+    
+    // Attach tags to exact matches
+    const exactWithTags = await Promise.all(
+      exactMatches.map(async link => ({
+        ...link,
+        tags: await getLinkTags(link.id)
+      }))
+    )
+
+    // Get semantically similar links (using tag embedding)
+    let similar: Awaited<ReturnType<typeof findLinksSimilarToTag>> = []
+    if (tag.embedding_text) {
+      const embedding = tag.embedding_text
+        .slice(1, -1)
+        .split(',')
+        .map(Number)
+      similar = await findLinksSimilarToTag(embedding, exactMatchIds, 20)
+      
+      // Attach tags to similar
+      similar = await Promise.all(
+        similar.map(async link => ({
+          ...link,
+          tags: await getLinkTags(link.id)
+        }))
+      ) as typeof similar
+    }
+
+    res.json({
+      tag: { id: tag.id, name: tag.name },
+      exact: exactWithTags,
+      similar
+    })
   } catch (err) {
     res.status(500).json({ error: (err as Error).message })
   }

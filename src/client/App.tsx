@@ -89,14 +89,17 @@ export default function App() {
     await loadTags()
   }, [loadTags])
 
-  // Filter by tag
+  const [tagSimilar, setTagSimilar] = useState<Link[]>([])
+
+  // Filter by tag - now uses tag detail endpoint with exact + similar
   const handleFilterByTag = useCallback(async (tag: Tag) => {
     setSelectedTag(tag)
     setView('byTag')
     setLoading(true)
-    const res = await fetch(`/api/links?tag=${tag.id}`)
+    const res = await fetch(`/api/tags/${tag.id}`)
     const data = await res.json()
-    setLinks(data.links)
+    setLinks(data.exact || [])
+    setTagSimilar(data.similar || [])
     setLoading(false)
   }, [])
 
@@ -107,6 +110,7 @@ export default function App() {
     setSimilarSource(null)
     setSearchQuery('')
     setSelectedTag(null)
+    setTagSimilar([])
     loadLinks()
   }
 
@@ -222,22 +226,50 @@ export default function App() {
         />
       ) : loading ? (
         <div style={{ textAlign: 'center', padding: 60, color: '#555' }}>Loading...</div>
-      ) : displayLinks.length === 0 ? (
+      ) : displayLinks.length === 0 && tagSimilar.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 60, color: '#555' }}>
           {view === 'chronological' ? 'No links yet. Send me some URLs!' : 'No results found'}
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {displayLinks.map(link => (
-            <LinkCard
-              key={link.id}
-              link={link}
-              onFindSimilar={() => handleFindSimilar(link)}
-              onTagClick={handleFilterByTag}
-              showSimilarity={view === 'search' || view === 'similar'}
-            />
-          ))}
-        </div>
+        <>
+          {/* Exact matches */}
+          {view === 'byTag' && displayLinks.length > 0 && (
+            <h3 style={{ color: '#888', fontSize: 13, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>
+              Tagged with "{selectedTag?.name}" ({displayLinks.length})
+            </h3>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {displayLinks.map(link => (
+              <LinkCard
+                key={link.id}
+                link={link}
+                onFindSimilar={() => handleFindSimilar(link)}
+                onTagClick={handleFilterByTag}
+                showSimilarity={view === 'search' || view === 'similar'}
+              />
+            ))}
+          </div>
+          
+          {/* Semantically similar (for tag view) */}
+          {view === 'byTag' && tagSimilar.length > 0 && (
+            <>
+              <h3 style={{ color: '#888', fontSize: 13, margin: '24px 0 12px', textTransform: 'uppercase', letterSpacing: 1 }}>
+                Semantically Similar ({tagSimilar.length})
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {tagSimilar.map(link => (
+                  <LinkCard
+                    key={link.id}
+                    link={link}
+                    onFindSimilar={() => handleFindSimilar(link)}
+                    onTagClick={handleFilterByTag}
+                    showSimilarity={true}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </>
       )}
     </div>
   )

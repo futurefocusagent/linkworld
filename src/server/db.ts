@@ -292,3 +292,35 @@ export async function getLinksByTag(tagId: number, limit = 100): Promise<Link[]>
   )
   return result.rows
 }
+
+// Get tag by ID with embedding
+export async function getTagById(tagId: number): Promise<(Tag & { embedding_text: string }) | null> {
+  const result = await pool.query<Tag & { embedding_text: string }>(
+    `SELECT id, name, created_at, embedding::text as embedding_text
+     FROM linkworld.tags WHERE id = $1`,
+    [tagId]
+  )
+  return result.rows[0] ?? null
+}
+
+// Find links semantically similar to a tag's embedding
+export async function findLinksSimilarToTag(
+  tagEmbedding: number[],
+  excludeLinkIds: number[],
+  limit = 20
+): Promise<(Link & { similarity: number })[]> {
+  const excludeClause = excludeLinkIds.length > 0 
+    ? `AND l.id NOT IN (${excludeLinkIds.join(',')})` 
+    : ''
+  
+  const result = await pool.query<Link & { similarity: number }>(
+    `SELECT l.id, l.url, l.title, l.og_title, l.og_description, l.og_image, l.created_at,
+            1 - (l.embedding <=> $1::vector) as similarity
+     FROM linkworld.links l
+     WHERE 1=1 ${excludeClause}
+     ORDER BY l.embedding <=> $1::vector
+     LIMIT $2`,
+    [`[${tagEmbedding.join(',')}]`, limit]
+  )
+  return result.rows
+}
