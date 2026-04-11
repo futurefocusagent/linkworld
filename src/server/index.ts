@@ -2,9 +2,15 @@ import 'dotenv/config'
 import express from 'express'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { initDb, insertLink, getLinksChronological, searchLinks, findSimilarToLink, getLinkById, getLinkCount } from './db.js'
+import {
+  initDb, insertLink, getLinksChronological, searchLinks,
+  findSimilarToLink, getLinkById, getLinkCount,
+  getAllTags, getLinkTags, setLinkTags, resolveTag,
+  searchTagsByName, deleteTag, mergeTags, getLinksByTag
+} from './db.js'
 import { scrapeUrl } from './firecrawl.js'
 import { embedDocument, embedQuery } from './embeddings.js'
+import { autoTagLink } from './tagger.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -44,6 +50,11 @@ app.post('/api/links', async (req, res) => {
     })
     console.log(`  Saved as ID: ${link.id}`)
 
+    // 4. Auto-generate tags (async, don't block response)
+    autoTagLink(link.id, scraped.title, scraped.markdown)
+      .then(result => console.log(`  Tagged with ${result.tags.length} tags:`, result.tags.map(t => t.name)))
+      .catch(err => console.error('  Auto-tagging failed:', err))
+
     res.json({ ok: true, link: { id: link.id, url: link.url, title: link.title } })
   } catch (err) {
     console.error('Error processing link:', err)
@@ -51,14 +62,30 @@ app.post('/api/links', async (req, res) => {
   }
 })
 
-// Get links chronologically
+// Get links chronologically (with tags)
 app.get('/api/links', async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit as string) || 100, 500)
     const offset = parseInt(req.query.offset as string) || 0
-    const links = await getLinksChronological(limit, offset)
+    const tagId = req.query.tag ? parseInt(req.query.tag as string) : undefined
+    
+    let links
+    if (tagId) {
+      links = await getLinksByTag(tagId, limit)
+    } else {
+      links = await getLinksChronological(limit, offset)
+    }
+    
+    // Attach tags to each link
+    const linksWithTags = await Promise.all(
+      links.map(async link => ({
+        ...link,
+        tags: await getLinkTags(link.id)
+      }))
+    )
+    
     const total = await getLinkCount()
-    res.json({ links, total })
+    res.json({ links: linksWithTags, total })
   } catch (err) {
     res.status(500).json({ error: (err as Error).message })
   }
@@ -75,7 +102,16 @@ app.get('/api/search', async (req, res) => {
     // Use RETRIEVAL_QUERY task type for search queries
     const embedding = await embedQuery(query)
     const results = await searchLinks(embedding, 20)
-    res.json({ results })
+    
+    // Attach tags
+    const resultsWithTags = await Promise.all(
+      results.map(async link => ({
+        ...link,
+        tags: await getLinkTags(link.id)
+      }))
+    )
+    
+    res.json({ results: resultsWithTags })
   } catch (err) {
     res.status(500).json({ error: (err as Error).message })
   }
@@ -97,7 +133,7 @@ app.get('/api/links/:id/similar', async (req, res) => {
   }
 })
 
-// Get single link details
+// Get single link details with tags
 app.get('/api/links/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10)
@@ -105,7 +141,79 @@ app.get('/api/links/:id', async (req, res) => {
     if (!link) {
       return res.status(404).json({ error: 'Link not found' })
     }
-    res.json(link)
+    const tags = await getLinkTags(id)
+    res.json({ ...link, tags })
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message })
+  }
+})
+
+// Update tags for a link
+app.put('/api/links/:id/tags', async (req, res) => {
+  try {
+    const linkId = parseInt(req.params.id, 10)
+    const { tags } = req.body as { tags: string[] }
+    
+    if (!Array.isArray(tags)) {
+      return res.status(400).json({ error: 'tags array required' })
+    }
+
+    // Resolve each tag (create or find existing)
+    const resolvedTags = await Promise.all(
+      tags.map(async name => {
+        const embedding = await embedQuery(name)
+        return resolveTag(name, embedding, 0.85)
+      })
+    )
+    
+    // Dedupe by ID
+    const uniqueTags = [...new Map(resolvedTags.map(t => [t.id, t])).values()]
+    
+    await setLinkTags(linkId, uniqueTags.map(t => t.id))
+    res.json({ tags: uniqueTags })
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message })
+  }
+})
+
+// ============ TAG ENDPOINTS ============
+
+// Get all tags with counts
+app.get('/api/tags', async (req, res) => {
+  try {
+    const search = req.query.q as string
+    let tags
+    if (search) {
+      tags = await searchTagsByName(search)
+    } else {
+      tags = await getAllTags()
+    }
+    res.json({ tags })
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message })
+  }
+})
+
+// Delete a tag
+app.delete('/api/tags/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10)
+    await deleteTag(id)
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message })
+  }
+})
+
+// Merge tags
+app.post('/api/tags/merge', async (req, res) => {
+  try {
+    const { sourceId, targetId } = req.body
+    if (!sourceId || !targetId) {
+      return res.status(400).json({ error: 'sourceId and targetId required' })
+    }
+    await mergeTags(sourceId, targetId)
+    res.json({ ok: true })
   } catch (err) {
     res.status(500).json({ error: (err as Error).message })
   }
