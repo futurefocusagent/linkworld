@@ -1,35 +1,31 @@
 import { embedQuery } from './embeddings.js'
 import { resolveTag, setLinkTags, type Tag } from './db.js'
 
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY
 
 interface TaggingResult {
   tags: Tag[]
   raw: string[]
 }
 
-// Generate tags for content using Claude
+// Generate tags for content using Gemini Flash
 async function generateTagCandidates(title: string, markdown: string): Promise<string[]> {
-  if (!ANTHROPIC_API_KEY) {
-    console.warn('ANTHROPIC_API_KEY not set, skipping auto-tagging')
+  if (!GEMINI_API_KEY) {
+    console.warn('GEMINI_API_KEY not set, skipping auto-tagging')
     return []
   }
 
   const truncatedMarkdown = markdown.slice(0, 4000)
   
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-3-5-haiku-20241022',
-      max_tokens: 200,
-      messages: [{
-        role: 'user',
-        content: `Generate exactly 10 tags for this webpage. Include tags for:
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: `Generate exactly 10 tags for this webpage. Include tags for:
 - Topic/subject matter (e.g., "machine learning", "art")
 - Content type (e.g., "tutorial", "news article", "documentation")
 - Domain/field (e.g., "technology", "culture")
@@ -42,17 +38,23 @@ Content preview:
 ${truncatedMarkdown}
 
 Output ONLY the 10 tags as a comma-separated list, lowercase, no explanations. Example: machine learning, tutorial, python, beginner, data science, neural networks, deep learning, ai, programming, education`
-      }]
-    })
-  })
+          }]
+        }],
+        generationConfig: {
+          maxOutputTokens: 100,
+          temperature: 0.3
+        }
+      })
+    }
+  )
 
   if (!response.ok) {
-    console.error('Claude tagging failed:', await response.text())
+    console.error('Gemini tagging failed:', await response.text())
     return []
   }
 
-  const data = await response.json() as { content: { text: string }[] }
-  const text = data.content[0]?.text || ''
+  const data = await response.json() as { candidates: { content: { parts: { text: string }[] } }[] }
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
   
   // Parse comma-separated tags
   const tags = text
