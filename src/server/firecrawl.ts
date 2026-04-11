@@ -1,0 +1,54 @@
+interface FirecrawlResponse {
+  success: boolean
+  data?: {
+    markdown: string
+    metadata?: {
+      title?: string
+      'og:title'?: string
+      'og:description'?: string
+      'og:image'?: string
+      ogTitle?: string
+      ogDescription?: string
+      ogImage?: string
+    }
+  }
+  error?: string
+}
+
+export interface ScrapedContent {
+  markdown: string
+  title: string
+  ogTitle?: string
+  ogDescription?: string
+  ogImage?: string
+}
+
+export async function scrapeUrl(url: string): Promise<ScrapedContent> {
+  const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.FIRECRAWL_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      url,
+      formats: ['markdown'],
+    }),
+  })
+
+  const data = await response.json() as FirecrawlResponse
+  
+  if (!data.success || !data.data) {
+    throw new Error(data.error || 'Firecrawl failed')
+  }
+
+  const meta = data.data.metadata || {}
+  
+  return {
+    markdown: data.data.markdown,
+    title: meta.title || meta['og:title'] || meta.ogTitle || url,
+    ogTitle: meta['og:title'] || meta.ogTitle,
+    ogDescription: meta['og:description'] || meta.ogDescription,
+    ogImage: meta['og:image'] || meta.ogImage,
+  }
+}
