@@ -31,18 +31,33 @@ const colors = {
   accent: '#666',
 }
 
+// Parse URL params on load
+function getInitialState() {
+  const params = new URLSearchParams(window.location.search)
+  const q = params.get('q')
+  const tag = params.get('tag')
+  const similar = params.get('similar')
+  
+  if (q) return { view: 'search' as View, searchQuery: q }
+  if (tag) return { view: 'byTag' as View, tagName: tag }
+  if (similar) return { view: 'similar' as View, similarId: parseInt(similar, 10) }
+  return { view: 'chronological' as View }
+}
+
 export default function App() {
+  const initialState = getInitialState()
   const [links, setLinks] = useState<Link[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [view, setView] = useState<View>('chronological')
-  const [searchQuery, setSearchQuery] = useState('')
+  const [view, setView] = useState<View>(initialState.view)
+  const [searchQuery, setSearchQuery] = useState('searchQuery' in initialState ? initialState.searchQuery : '')
   const [searchResults, setSearchResults] = useState<Link[]>([])
   const [searching, setSearching] = useState(false)
   const [similarSource, setSimilarSource] = useState<Link | null>(null)
   const [allTags, setAllTags] = useState<Tag[]>([])
   const [selectedTag, setSelectedTag] = useState<Tag | null>(null)
   const [tagSimilar, setTagSimilar] = useState<Link[]>([])
+  const [initialized, setInitialized] = useState(false)
 
   const loadLinks = useCallback(async (background = false) => {
     if (!background) setLoading(true)
@@ -56,6 +71,56 @@ export default function App() {
   useEffect(() => {
     loadLinks()
   }, [loadLinks])
+
+  // Handle initial URL state
+  useEffect(() => {
+    if (initialized) return
+    setInitialized(true)
+    
+    const initial = getInitialState()
+    if ('searchQuery' in initial && initial.searchQuery) {
+      // Run initial search
+      setSearching(true)
+      fetch(`/api/search?q=${encodeURIComponent(initial.searchQuery)}`)
+        .then(res => res.json())
+        .then(data => {
+          setSearchResults(data.results)
+          setSearching(false)
+        })
+    } else if ('tagName' in initial && initial.tagName) {
+      // Load tag by name
+      fetch('/api/tags')
+        .then(res => res.json())
+        .then(data => {
+          const tag = data.tags.find((t: Tag) => t.name.toLowerCase() === initial.tagName?.toLowerCase())
+          if (tag) {
+            setSelectedTag(tag)
+            return fetch(`/api/tags/${tag.id}`)
+          }
+        })
+        .then(res => res?.json())
+        .then(data => {
+          if (data) {
+            setLinks(data.exact || [])
+            setTagSimilar(data.similar || [])
+            setLoading(false)
+          }
+        })
+    } else if ('similarId' in initial && initial.similarId) {
+      // Load similar to link
+      fetch(`/api/links/${initial.similarId}`)
+        .then(res => res.json())
+        .then(link => {
+          setSimilarSource(link)
+          return fetch(`/api/links/${initial.similarId}/similar`)
+        })
+        .then(res => res.json())
+        .then(data => {
+          setSearchResults(data.similar)
+          setSearching(false)
+        })
+    }
+  }, [initialized])
 
   // Reload on tab focus (background, no flash)
   useEffect(() => {
@@ -72,6 +137,8 @@ export default function App() {
     if (!searchQuery.trim()) return
     setSearching(true)
     setView('search')
+    // Update URL
+    window.history.pushState({}, '', `?q=${encodeURIComponent(searchQuery)}`)
     try {
       const res = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}`)
       const data = await res.json()
@@ -86,6 +153,8 @@ export default function App() {
     setSearching(true)
     setView('similar')
     setSimilarSource(link)
+    // Update URL
+    window.history.pushState({}, '', `?similar=${link.id}`)
     try {
       const res = await fetch(`/api/links/${link.id}/similar`)
       const data = await res.json()
@@ -110,6 +179,8 @@ export default function App() {
   const handleFilterByTag = useCallback(async (tag: Tag) => {
     setSelectedTag(tag)
     setView('byTag')
+    // Update URL
+    window.history.pushState({}, '', `?tag=${encodeURIComponent(tag.name)}`)
     setLoading(true)
     const res = await fetch(`/api/tags/${tag.id}`)
     const data = await res.json()
@@ -125,6 +196,8 @@ export default function App() {
     setSearchQuery('')
     setSelectedTag(null)
     setTagSimilar([])
+    // Clear URL params
+    window.history.pushState({}, '', window.location.pathname)
     loadLinks()
   }
 
