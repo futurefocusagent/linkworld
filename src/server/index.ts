@@ -153,7 +153,15 @@ app.get('/api/links/:id', async (req, res) => {
       return res.status(404).json({ error: 'Link not found' })
     }
     const tags = await getLinkTags(id)
-    res.json({ ...link, tags })
+    // Include markdown if requested
+    const includeContent = req.query.content === 'true'
+    if (includeContent) {
+      res.json({ ...link, tags })
+    } else {
+      // Exclude markdown by default (it's large)
+      const { markdown, ...rest } = link as typeof link & { markdown?: string }
+      res.json({ ...rest, tags })
+    }
   } catch (err) {
     res.status(500).json({ error: (err as Error).message })
   }
