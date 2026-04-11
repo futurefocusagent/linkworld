@@ -37,7 +37,7 @@ export async function initDb() {
       og_title TEXT,
       og_description TEXT,
       og_image TEXT,
-      embedding vector(768),
+      embedding vector(3072),
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `)
