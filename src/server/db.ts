@@ -147,6 +147,21 @@ export async function getLinkCount(): Promise<number> {
   return parseInt(result.rows[0].count, 10)
 }
 
+// Search links by tag text match (case-insensitive, partial match)
+export async function searchLinksByTagText(query: string, limit = 20): Promise<Link[]> {
+  const result = await pool.query<Link>(
+    `SELECT DISTINCT l.id, l.url, l.title, l.og_title, l.og_description, l.og_image, l.created_at
+     FROM linkworld.links l
+     JOIN linkworld.link_tags lt ON l.id = lt.link_id
+     JOIN linkworld.tags t ON lt.tag_id = t.id
+     WHERE t.name ILIKE '%' || $1 || '%'
+     ORDER BY l.created_at DESC
+     LIMIT $2`,
+    [query.toLowerCase().trim(), limit]
+  )
+  return result.rows
+}
+
 // ============ TAG FUNCTIONS ============
 
 export interface Tag {

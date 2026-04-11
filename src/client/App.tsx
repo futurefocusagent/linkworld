@@ -259,14 +259,15 @@ export default function App() {
               TAGGED "{selectedTag?.name?.toUpperCase()}" ({displayLinks.length})
             </h3>
           )}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {displayLinks.map(link => (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            {displayLinks.map((link, idx) => (
               <LinkCard
                 key={link.id}
                 link={link}
                 onFindSimilar={() => handleFindSimilar(link)}
                 onTagClick={handleFilterByTag}
                 showSimilarity={view === 'search' || view === 'similar'}
+                isFirst={idx === 0}
               />
             ))}
           </div>
@@ -276,14 +277,15 @@ export default function App() {
               <h3 style={{ color: colors.textMuted, fontSize: 10, margin: '32px 0 16px', letterSpacing: '0.1em' }}>
                 SEMANTICALLY SIMILAR ({tagSimilar.length})
               </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {tagSimilar.map(link => (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                {tagSimilar.map((link, idx) => (
                   <LinkCard
                     key={link.id}
                     link={link}
                     onFindSimilar={() => handleFindSimilar(link)}
                     onTagClick={handleFilterByTag}
                     showSimilarity={true}
+                    isFirst={idx === 0}
                   />
                 ))}
               </div>
@@ -300,11 +302,13 @@ function LinkCard({
   onFindSimilar,
   onTagClick,
   showSimilarity,
+  isFirst = false,
 }: {
   link: Link
   onFindSimilar: () => void
   onTagClick: (tag: Tag) => void
   showSimilarity: boolean
+  isFirst?: boolean
 }) {
   const displayTitle = link.og_title || link.title
   const domain = new URL(link.url).hostname.replace('www.', '')
@@ -313,7 +317,10 @@ function LinkCard({
     <div
       style={{
         background: colors.card,
-        border: `1px solid ${colors.border}`,
+        borderLeft: `1px solid ${colors.border}`,
+        borderRight: `1px solid ${colors.border}`,
+        borderBottom: `1px solid ${colors.border}`,
+        borderTop: isFirst ? `1px solid ${colors.border}` : 'none',
         padding: 20,
         display: 'flex',
         gap: 20,

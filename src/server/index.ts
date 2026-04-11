@@ -3,7 +3,7 @@ import express from 'express'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import {
-  initDb, insertLink, getLinksChronological, searchLinks,
+  initDb, insertLink, getLinksChronological, searchLinks, searchLinksByTagText,
   findSimilarToLink, getLinkById, getLinkCount,
   getAllTags, getLinkTags, setLinkTags, resolveTag,
   searchTagsByName, deleteTag, mergeTags, getLinksByTag,
@@ -117,7 +117,7 @@ app.get('/api/links', async (req, res) => {
   }
 })
 
-// Search links by semantic similarity
+// Search links by semantic similarity + tag text matching
 app.get('/api/search', async (req, res) => {
   try {
     const query = req.query.q as string
@@ -125,13 +125,36 @@ app.get('/api/search', async (req, res) => {
       return res.status(400).json({ error: 'q (query) required' })
     }
 
-    // Use RETRIEVAL_QUERY task type for search queries
-    const embedding = await embedQuery(query)
-    const results = await searchLinks(embedding, 20)
+    // Run both searches in parallel
+    const [embedding, tagMatches] = await Promise.all([
+      embedQuery(query),
+      searchLinksByTagText(query, 20)
+    ])
+    
+    const semanticResults = await searchLinks(embedding, 20)
+    
+    // Merge results: tag matches first (with high similarity), then semantic
+    const tagMatchIds = new Set(tagMatches.map(l => l.id))
+    const mergedResults: (typeof semanticResults[0])[] = []
+    
+    // Add tag matches first with boosted similarity
+    for (const link of tagMatches) {
+      mergedResults.push({ ...link, similarity: 0.99 })
+    }
+    
+    // Add semantic results that aren't already in tag matches
+    for (const link of semanticResults) {
+      if (!tagMatchIds.has(link.id)) {
+        mergedResults.push(link)
+      }
+    }
+    
+    // Limit to 20 total
+    const finalResults = mergedResults.slice(0, 20)
     
     // Attach tags
     const resultsWithTags = await Promise.all(
-      results.map(async link => ({
+      finalResults.map(async link => ({
         ...link,
         tags: await getLinkTags(link.id)
       }))
