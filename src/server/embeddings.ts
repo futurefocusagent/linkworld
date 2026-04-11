@@ -1,14 +1,27 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
-
-// Gemini text-embedding-004 produces 768-dimensional embeddings
-const model = genAI.getGenerativeModel({ model: 'text-embedding-004' })
+// Using Gemini embedding-001 (768 dimensions)
+const EMBEDDING_MODEL = 'embedding-001'
 
 export async function getEmbedding(text: string): Promise<number[]> {
   // Truncate to ~8000 chars to stay within token limits
   const truncated = text.slice(0, 8000)
   
-  const result = await model.embedContent(truncated)
-  return result.embedding.values
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${EMBEDDING_MODEL}:embedContent?key=${process.env.GEMINI_API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: `models/${EMBEDDING_MODEL}`,
+        content: { parts: [{ text: truncated }] },
+      }),
+    }
+  )
+  
+  if (!response.ok) {
+    const err = await response.text()
+    throw new Error(`Gemini embedding failed: ${err}`)
+  }
+  
+  const data = await response.json() as { embedding: { values: number[] } }
+  return data.embedding.values
 }
