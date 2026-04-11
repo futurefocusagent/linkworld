@@ -13,6 +13,7 @@ import { scrapeUrl } from './firecrawl.js'
 import { embedDocument, embedQuery } from './embeddings.js'
 import { autoTagLink } from './tagger.js'
 import { generateTitle } from './titlegen.js'
+import { initImageStorage, downloadAndSaveImage, extractFirstImage, getImageUrl, getStorageDir } from './images.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -44,24 +45,35 @@ app.post('/api/links', async (req, res) => {
       console.log(`  Scraped: ${title}`)
     }
 
-    // 3. Generate embedding from markdown content (RETRIEVAL_DOCUMENT for storage)
+    // 3. Download and save image (OG image or first content image)
+    let savedImage: string | null = null
+    const imageUrl = scraped.ogImage || extractFirstImage(scraped.markdown)
+    if (imageUrl) {
+      console.log(`  Downloading image: ${imageUrl.slice(0, 60)}...`)
+      savedImage = await downloadAndSaveImage(imageUrl)
+      if (savedImage) {
+        console.log(`  Saved image: ${savedImage}`)
+      }
+    }
+
+    // 4. Generate embedding from markdown content (RETRIEVAL_DOCUMENT for storage)
     const textForEmbedding = `${title}\n\n${scraped.ogDescription || ''}\n\n${scraped.markdown}`
     const embedding = await embedDocument(textForEmbedding)
     console.log(`  Embedding: ${embedding.length} dimensions`)
 
-    // 4. Save to database
+    // 5. Save to database (store local image path, not original URL)
     const link = await insertLink({
       url,
       title,
       markdown: scraped.markdown,
       ogTitle: scraped.ogTitle,
       ogDescription: scraped.ogDescription,
-      ogImage: scraped.ogImage,
+      ogImage: savedImage ? getImageUrl(savedImage) : undefined,
       embedding,
     })
     console.log(`  Saved as ID: ${link.id}`)
 
-    // 5. Auto-generate tags (async, don't block response)
+    // 6. Auto-generate tags (async, don't block response)
     autoTagLink(link.id, title, scraped.markdown)
       .then(result => console.log(`  Tagged with ${result.tags.length} tags:`, result.tags.map(t => t.name)))
       .catch(err => console.error('  Auto-tagging failed:', err))
@@ -287,6 +299,57 @@ app.post('/api/tags/merge', async (req, res) => {
   }
 })
 
+// Backfill images for existing links (admin endpoint)
+app.post('/api/admin/backfill-images', async (req, res) => {
+  try {
+    const links = await getLinksChronological(500, 0)
+    const results: { id: number; title: string; result: string }[] = []
+    
+    for (const link of links) {
+      // Skip if already has local image
+      if (link.og_image?.startsWith('/images/')) {
+        results.push({ id: link.id, title: link.title, result: 'already local' })
+        continue
+      }
+      
+      // Get full link data with markdown
+      const fullLink = await getLinkById(link.id)
+      if (!fullLink) continue
+      
+      // Try OG image first, then first content image
+      const imageUrl = (fullLink as any).og_image || extractFirstImage((fullLink as any).markdown || '')
+      
+      if (!imageUrl) {
+        results.push({ id: link.id, title: link.title, result: 'no image found' })
+        continue
+      }
+      
+      // Download and save
+      const savedImage = await downloadAndSaveImage(imageUrl)
+      if (savedImage) {
+        // Update database
+        const { Pool } = await import('pg')
+        const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+        await pool.query(
+          'UPDATE linkworld.links SET og_image = $1 WHERE id = $2',
+          [getImageUrl(savedImage), link.id]
+        )
+        await pool.end()
+        results.push({ id: link.id, title: link.title, result: `saved: ${savedImage}` })
+      } else {
+        results.push({ id: link.id, title: link.title, result: 'download failed' })
+      }
+    }
+    
+    res.json({ ok: true, results })
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message })
+  }
+})
+
+// Serve saved images from persistent storage
+app.use('/images', express.static(getStorageDir()))
+
 // Serve static files
 const clientDist = path.join(__dirname, '../client')
 app.use(express.static(clientDist))
@@ -298,9 +361,13 @@ app.get('*', (_req, res) => {
 
 async function boot() {
   try {
+    // Initialize storage
+    initImageStorage()
+    
     await initDb()
     app.listen(PORT, () => {
       console.log(`LinkWorld running on port ${PORT}`)
+      console.log(`Image storage: ${getStorageDir()}`)
     })
   } catch (err) {
     console.error('Boot failed:', err)
