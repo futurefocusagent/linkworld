@@ -4,7 +4,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { initDb, insertLink, getLinksChronological, searchLinks, findSimilarToLink, getLinkById, getLinkCount } from './db.js'
 import { scrapeUrl } from './firecrawl.js'
-import { getEmbedding } from './embeddings.js'
+import { embedDocument, embedQuery } from './embeddings.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -27,9 +27,9 @@ app.post('/api/links', async (req, res) => {
     const scraped = await scrapeUrl(url)
     console.log(`  Scraped: ${scraped.title}`)
 
-    // 2. Generate embedding from markdown content
+    // 2. Generate embedding from markdown content (RETRIEVAL_DOCUMENT for storage)
     const textForEmbedding = `${scraped.title}\n\n${scraped.ogDescription || ''}\n\n${scraped.markdown}`
-    const embedding = await getEmbedding(textForEmbedding)
+    const embedding = await embedDocument(textForEmbedding)
     console.log(`  Embedding: ${embedding.length} dimensions`)
 
     // 3. Save to database
@@ -72,7 +72,8 @@ app.get('/api/search', async (req, res) => {
       return res.status(400).json({ error: 'q (query) required' })
     }
 
-    const embedding = await getEmbedding(query)
+    // Use RETRIEVAL_QUERY task type for search queries
+    const embedding = await embedQuery(query)
     const results = await searchLinks(embedding, 20)
     res.json({ results })
   } catch (err) {

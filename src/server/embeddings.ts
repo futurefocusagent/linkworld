@@ -1,7 +1,9 @@
 // Using Gemini Embedding 2 (3072 dimensions, 8K token limit)
 const EMBEDDING_MODEL = 'gemini-embedding-2-preview'
 
-export async function getEmbedding(text: string): Promise<number[]> {
+type TaskType = 'RETRIEVAL_DOCUMENT' | 'RETRIEVAL_QUERY'
+
+export async function getEmbedding(text: string, taskType: TaskType = 'RETRIEVAL_DOCUMENT'): Promise<number[]> {
   // Truncate to ~8000 chars to stay within token limits
   const truncated = text.slice(0, 8000)
   
@@ -13,6 +15,7 @@ export async function getEmbedding(text: string): Promise<number[]> {
       body: JSON.stringify({
         model: `models/${EMBEDDING_MODEL}`,
         content: { parts: [{ text: truncated }] },
+        taskType,
       }),
     }
   )
@@ -24,4 +27,13 @@ export async function getEmbedding(text: string): Promise<number[]> {
   
   const data = await response.json() as { embedding: { values: number[] } }
   return data.embedding.values
+}
+
+// Convenience wrappers
+export async function embedDocument(text: string): Promise<number[]> {
+  return getEmbedding(text, 'RETRIEVAL_DOCUMENT')
+}
+
+export async function embedQuery(text: string): Promise<number[]> {
+  return getEmbedding(text, 'RETRIEVAL_QUERY')
 }
