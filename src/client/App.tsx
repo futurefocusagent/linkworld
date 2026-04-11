@@ -44,18 +44,29 @@ export default function App() {
   const [selectedTag, setSelectedTag] = useState<Tag | null>(null)
   const [tagSimilar, setTagSimilar] = useState<Link[]>([])
 
-  const loadLinks = useCallback(async () => {
-    setLoading(true)
+  const loadLinks = useCallback(async (background = false) => {
+    if (!background) setLoading(true)
     const res = await fetch('/api/links')
     const data = await res.json()
     setLinks(data.links)
     setTotal(data.total)
-    setLoading(false)
+    if (!background) setLoading(false)
   }, [])
 
   useEffect(() => {
     loadLinks()
   }, [loadLinks])
+
+  // Reload on tab focus (background, no flash)
+  useEffect(() => {
+    const handleFocus = () => {
+      if (view === 'chronological') {
+        loadLinks(true)
+      }
+    }
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
+  }, [loadLinks, view])
 
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) return
