@@ -1,10 +1,11 @@
 import pg from 'pg'
 const { Pool } = pg
 
-// Always use SSL for Render Postgres (external connections require it)
+// Internal Render URLs don't use SSL, external ones do
+const isInternal = process.env.DATABASE_URL?.match(/@dpg-[^.]+\//) !== null
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  ssl: isInternal ? false : { rejectUnauthorized: false },
 })
 
 export interface Link {
