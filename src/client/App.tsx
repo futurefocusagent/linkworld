@@ -20,6 +20,17 @@ interface Link {
 
 type View = 'chronological' | 'search' | 'similar' | 'tags' | 'byTag'
 
+// Monochrome color palette
+const colors = {
+  bg: '#0a0a0a',
+  card: '#111',
+  border: '#222',
+  text: '#999',
+  textMuted: '#555',
+  textBright: '#ccc',
+  accent: '#666',
+}
+
 export default function App() {
   const [links, setLinks] = useState<Link[]>([])
   const [total, setTotal] = useState(0)
@@ -31,8 +42,8 @@ export default function App() {
   const [similarSource, setSimilarSource] = useState<Link | null>(null)
   const [allTags, setAllTags] = useState<Tag[]>([])
   const [selectedTag, setSelectedTag] = useState<Tag | null>(null)
+  const [tagSimilar, setTagSimilar] = useState<Link[]>([])
 
-  // Load chronological links
   const loadLinks = useCallback(async () => {
     setLoading(true)
     const res = await fetch('/api/links')
@@ -46,7 +57,6 @@ export default function App() {
     loadLinks()
   }, [loadLinks])
 
-  // Search handler
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) return
     setSearching(true)
@@ -61,7 +71,6 @@ export default function App() {
     setSearching(false)
   }, [searchQuery])
 
-  // Find similar handler
   const handleFindSimilar = useCallback(async (link: Link) => {
     setSearching(true)
     setView('similar')
@@ -76,22 +85,17 @@ export default function App() {
     setSearching(false)
   }, [])
 
-  // Load tags
   const loadTags = useCallback(async () => {
     const res = await fetch('/api/tags')
     const data = await res.json()
     setAllTags(data.tags)
   }, [])
 
-  // Show tags view
   const handleShowTags = useCallback(async () => {
     setView('tags')
     await loadTags()
   }, [loadTags])
 
-  const [tagSimilar, setTagSimilar] = useState<Link[]>([])
-
-  // Filter by tag - now uses tag detail endpoint with exact + similar
   const handleFilterByTag = useCallback(async (tag: Tag) => {
     setSelectedTag(tag)
     setView('byTag')
@@ -103,7 +107,6 @@ export default function App() {
     setLoading(false)
   }, [])
 
-  // Back to chronological
   const handleBackToList = () => {
     setView('chronological')
     setSearchResults([])
@@ -117,67 +120,72 @@ export default function App() {
   const displayLinks = view === 'chronological' || view === 'byTag' ? links : searchResults
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px' }}>
+    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px' }}>
       {/* Header */}
-      <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ marginBottom: 32, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 4 }}>🔗 LinkWorld</h1>
-          <p style={{ color: '#666', fontSize: 14 }}>
-            {total} links saved · semantic bookmark manager
+          <h1 style={{ fontSize: 20, fontWeight: 400, marginBottom: 4, color: colors.textBright, letterSpacing: '0.05em' }}>
+            LINKWORLD
+          </h1>
+          <p style={{ color: colors.textMuted, fontSize: 12, letterSpacing: '0.02em' }}>
+            {total} links · semantic bookmarks
           </p>
         </div>
         <button
           onClick={handleShowTags}
           style={{
             padding: '8px 16px',
-            borderRadius: 8,
-            border: '1px solid #333',
-            background: view === 'tags' ? '#333' : 'transparent',
-            color: '#888',
-            fontSize: 14,
+            borderRadius: 0,
+            border: `1px solid ${colors.border}`,
+            background: view === 'tags' ? colors.border : 'transparent',
+            color: colors.text,
+            fontSize: 12,
             cursor: 'pointer',
+            letterSpacing: '0.05em',
           }}
         >
-          🏷️ Tags
+          TAGS
         </button>
       </div>
 
       {/* Search bar */}
       {view !== 'tags' && (
-        <div style={{ marginBottom: 24, display: 'flex', gap: 8 }}>
+        <div style={{ marginBottom: 32, display: 'flex', gap: 0 }}>
           <input
             type="text"
-            placeholder="Search by meaning..."
+            placeholder="search..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSearch()}
             style={{
               flex: 1,
-              padding: '12px 16px',
-              borderRadius: 8,
-              border: '1px solid #333',
-              background: '#1a1a1a',
-              color: '#e0e0e0',
-              fontSize: 15,
+              padding: '14px 16px',
+              borderRadius: 0,
+              border: `1px solid ${colors.border}`,
+              borderRight: 'none',
+              background: colors.card,
+              color: colors.textBright,
+              fontSize: 13,
               outline: 'none',
+              letterSpacing: '0.02em',
             }}
           />
           <button
             onClick={handleSearch}
             disabled={searching || !searchQuery.trim()}
             style={{
-              padding: '12px 20px',
-              borderRadius: 8,
-              border: 'none',
-              background: '#3b82f6',
-              color: '#fff',
-              fontSize: 15,
-              fontWeight: 600,
+              padding: '14px 24px',
+              borderRadius: 0,
+              border: `1px solid ${colors.border}`,
+              background: colors.border,
+              color: colors.textBright,
+              fontSize: 12,
               cursor: 'pointer',
-              opacity: searching || !searchQuery.trim() ? 0.5 : 1,
+              opacity: searching || !searchQuery.trim() ? 0.3 : 1,
+              letterSpacing: '0.05em',
             }}
           >
-            {searching ? '...' : 'Search'}
+            {searching ? '...' : 'SEARCH'}
           </button>
         </div>
       )}
@@ -185,33 +193,34 @@ export default function App() {
       {/* View indicator */}
       {view !== 'chronological' && view !== 'tags' && (
         <div style={{
-          marginBottom: 16,
+          marginBottom: 24,
           padding: '12px 16px',
-          background: '#1a1a1a',
-          borderRadius: 8,
+          background: colors.card,
+          border: `1px solid ${colors.border}`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
         }}>
-          <span style={{ color: '#888', fontSize: 14 }}>
-            {view === 'search' && `Search results for "${searchQuery}"`}
-            {view === 'similar' && `Similar to: ${similarSource?.title}`}
-            {view === 'byTag' && `Tag: ${selectedTag?.name}`}
-            {view !== 'byTag' && ` · ${searchResults.length} results`}
+          <span style={{ color: colors.textMuted, fontSize: 11, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+            {view === 'search' && `results for "${searchQuery}"`}
+            {view === 'similar' && `similar to: ${similarSource?.title?.slice(0, 40)}...`}
+            {view === 'byTag' && `tag: ${selectedTag?.name}`}
+            {view !== 'byTag' && ` · ${searchResults.length}`}
           </span>
           <button
             onClick={handleBackToList}
             style={{
               padding: '6px 12px',
-              borderRadius: 6,
-              border: '1px solid #333',
+              borderRadius: 0,
+              border: `1px solid ${colors.border}`,
               background: 'transparent',
-              color: '#888',
-              fontSize: 13,
+              color: colors.textMuted,
+              fontSize: 11,
               cursor: 'pointer',
+              letterSpacing: '0.05em',
             }}
           >
-            ← Back to list
+            ← BACK
           </button>
         </div>
       )}
@@ -225,20 +234,21 @@ export default function App() {
           onBack={handleBackToList}
         />
       ) : loading ? (
-        <div style={{ textAlign: 'center', padding: 60, color: '#555' }}>Loading...</div>
+        <div style={{ textAlign: 'center', padding: 80, color: colors.textMuted, fontSize: 12, letterSpacing: '0.1em' }}>
+          LOADING...
+        </div>
       ) : displayLinks.length === 0 && tagSimilar.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 60, color: '#555' }}>
-          {view === 'chronological' ? 'No links yet. Send me some URLs!' : 'No results found'}
+        <div style={{ textAlign: 'center', padding: 80, color: colors.textMuted, fontSize: 12, letterSpacing: '0.05em' }}>
+          {view === 'chronological' ? 'NO LINKS YET' : 'NO RESULTS'}
         </div>
       ) : (
         <>
-          {/* Exact matches */}
           {view === 'byTag' && displayLinks.length > 0 && (
-            <h3 style={{ color: '#888', fontSize: 13, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>
-              Tagged with "{selectedTag?.name}" ({displayLinks.length})
+            <h3 style={{ color: colors.textMuted, fontSize: 10, marginBottom: 16, letterSpacing: '0.1em' }}>
+              TAGGED "{selectedTag?.name?.toUpperCase()}" ({displayLinks.length})
             </h3>
           )}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {displayLinks.map(link => (
               <LinkCard
                 key={link.id}
@@ -250,13 +260,12 @@ export default function App() {
             ))}
           </div>
           
-          {/* Semantically similar (for tag view) */}
           {view === 'byTag' && tagSimilar.length > 0 && (
             <>
-              <h3 style={{ color: '#888', fontSize: 13, margin: '24px 0 12px', textTransform: 'uppercase', letterSpacing: 1 }}>
-                Semantically Similar ({tagSimilar.length})
+              <h3 style={{ color: colors.textMuted, fontSize: 10, margin: '32px 0 16px', letterSpacing: '0.1em' }}>
+                SEMANTICALLY SIMILAR ({tagSimilar.length})
               </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {tagSimilar.map(link => (
                   <LinkCard
                     key={link.id}
@@ -292,26 +301,25 @@ function LinkCard({
   return (
     <div
       style={{
-        background: '#1a1a1a',
-        border: '1px solid #222',
-        borderRadius: 10,
-        padding: 16,
+        background: colors.card,
+        border: `1px solid ${colors.border}`,
+        padding: 20,
         display: 'flex',
-        gap: 12,
+        gap: 20,
       }}
     >
-      {/* OG Image thumbnail */}
+      {/* Large image */}
       {link.og_image && (
         <div style={{ flexShrink: 0 }}>
           <img
             src={link.og_image}
             alt=""
             style={{
-              width: 80,
-              height: 60,
+              width: 160,
+              height: 120,
               objectFit: 'cover',
-              borderRadius: 6,
-              background: '#222',
+              background: '#000',
+              filter: 'grayscale(100%)',
             }}
             onError={e => (e.currentTarget.style.display = 'none')}
           />
@@ -325,15 +333,13 @@ function LinkCard({
           target="_blank"
           rel="noopener noreferrer"
           style={{
-            color: '#e0e0e0',
+            color: colors.textBright,
             textDecoration: 'none',
-            fontWeight: 600,
-            fontSize: 15,
+            fontWeight: 400,
+            fontSize: 14,
             display: 'block',
-            marginBottom: 4,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
+            marginBottom: 8,
+            lineHeight: 1.4,
           }}
         >
           {displayTitle}
@@ -341,14 +347,15 @@ function LinkCard({
 
         {link.og_description && (
           <p style={{
-            color: '#888',
-            fontSize: 13,
-            marginBottom: 6,
+            color: colors.textMuted,
+            fontSize: 12,
+            marginBottom: 12,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             display: '-webkit-box',
             WebkitLineClamp: 2,
             WebkitBoxOrient: 'vertical',
+            lineHeight: 1.5,
           }}>
             {link.og_description}
           </p>
@@ -356,19 +363,20 @@ function LinkCard({
 
         {/* Tags */}
         {link.tags && link.tags.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
             {link.tags.map(tag => (
               <button
                 key={tag.id}
                 onClick={() => onTagClick(tag)}
                 style={{
-                  padding: '2px 8px',
-                  borderRadius: 4,
-                  border: 'none',
-                  background: '#2a2a2a',
-                  color: '#888',
-                  fontSize: 11,
+                  padding: '3px 8px',
+                  borderRadius: 0,
+                  border: `1px solid ${colors.border}`,
+                  background: 'transparent',
+                  color: colors.textMuted,
+                  fontSize: 10,
                   cursor: 'pointer',
+                  letterSpacing: '0.02em',
                 }}
               >
                 {tag.name}
@@ -377,17 +385,17 @@ function LinkCard({
           </div>
         )}
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12 }}>
-          <span style={{ color: '#555' }}>{domain}</span>
-          <span style={{ color: '#444' }}>·</span>
-          <span style={{ color: '#555' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 10, letterSpacing: '0.02em' }}>
+          <span style={{ color: colors.textMuted }}>{domain}</span>
+          <span style={{ color: colors.border }}>·</span>
+          <span style={{ color: colors.textMuted }}>
             {new Date(link.created_at).toLocaleDateString()}
           </span>
           {showSimilarity && link.similarity !== undefined && (
             <>
-              <span style={{ color: '#444' }}>·</span>
-              <span style={{ color: '#3b82f6' }}>
-                {(link.similarity * 100).toFixed(0)}% match
+              <span style={{ color: colors.border }}>·</span>
+              <span style={{ color: colors.text }}>
+                {(link.similarity * 100).toFixed(0)}%
               </span>
             </>
           )}
@@ -400,20 +408,20 @@ function LinkCard({
         title="Find similar"
         style={{
           flexShrink: 0,
-          width: 36,
-          height: 36,
-          borderRadius: 8,
-          border: '1px solid #333',
+          width: 40,
+          height: 40,
+          borderRadius: 0,
+          border: `1px solid ${colors.border}`,
           background: 'transparent',
-          color: '#666',
-          fontSize: 16,
+          color: colors.textMuted,
+          fontSize: 14,
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
-        🔍
+        ⌕
       </button>
     </div>
   )
@@ -453,33 +461,33 @@ function TagsView({
   return (
     <div>
       <div style={{
-        marginBottom: 16,
+        marginBottom: 24,
         padding: '12px 16px',
-        background: '#1a1a1a',
-        borderRadius: 8,
+        background: colors.card,
+        border: `1px solid ${colors.border}`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
       }}>
-        <span style={{ color: '#888', fontSize: 14 }}>
-          {tags.length} tags
+        <span style={{ color: colors.textMuted, fontSize: 11, letterSpacing: '0.05em' }}>
+          {tags.length} TAGS
           {mergeSource && (
-            <span style={{ color: '#f59e0b', marginLeft: 12 }}>
-              Merging "{mergeSource.name}" → click target tag
+            <span style={{ color: colors.text, marginLeft: 16 }}>
+              MERGING "{mergeSource.name}" → CLICK TARGET
               <button
                 onClick={() => setMergeSource(null)}
                 style={{
-                  marginLeft: 8,
+                  marginLeft: 12,
                   padding: '2px 8px',
-                  borderRadius: 4,
-                  border: 'none',
-                  background: '#333',
-                  color: '#888',
-                  fontSize: 11,
+                  borderRadius: 0,
+                  border: `1px solid ${colors.border}`,
+                  background: 'transparent',
+                  color: colors.textMuted,
+                  fontSize: 10,
                   cursor: 'pointer',
                 }}
               >
-                Cancel
+                CANCEL
               </button>
             </span>
           )}
@@ -488,15 +496,16 @@ function TagsView({
           onClick={onBack}
           style={{
             padding: '6px 12px',
-            borderRadius: 6,
-            border: '1px solid #333',
+            borderRadius: 0,
+            border: `1px solid ${colors.border}`,
             background: 'transparent',
-            color: '#888',
-            fontSize: 13,
+            color: colors.textMuted,
+            fontSize: 11,
             cursor: 'pointer',
+            letterSpacing: '0.05em',
           }}
         >
-          ← Back to links
+          ← BACK
         </button>
       </div>
 
@@ -507,11 +516,10 @@ function TagsView({
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 8,
-              padding: '8px 12px',
-              borderRadius: 8,
-              background: mergeSource?.id === tag.id ? '#3b82f6' : '#1a1a1a',
-              border: '1px solid #333',
+              gap: 10,
+              padding: '10px 14px',
+              background: mergeSource?.id === tag.id ? colors.border : colors.card,
+              border: `1px solid ${colors.border}`,
             }}
           >
             <button
@@ -519,15 +527,15 @@ function TagsView({
               style={{
                 background: 'none',
                 border: 'none',
-                color: '#e0e0e0',
-                fontSize: 14,
+                color: colors.textBright,
+                fontSize: 12,
                 cursor: 'pointer',
                 padding: 0,
               }}
             >
               {tag.name}
             </button>
-            <span style={{ color: '#555', fontSize: 12 }}>
+            <span style={{ color: colors.textMuted, fontSize: 11 }}>
               {tag.count}
             </span>
             <button
@@ -536,8 +544,8 @@ function TagsView({
               style={{
                 background: 'none',
                 border: 'none',
-                color: '#555',
-                fontSize: 12,
+                color: colors.textMuted,
+                fontSize: 11,
                 cursor: 'pointer',
                 padding: '0 4px',
               }}
@@ -550,8 +558,8 @@ function TagsView({
               style={{
                 background: 'none',
                 border: 'none',
-                color: '#555',
-                fontSize: 12,
+                color: colors.textMuted,
+                fontSize: 11,
                 cursor: 'pointer',
                 padding: '0 4px',
               }}
