@@ -42,13 +42,9 @@ export async function initDb() {
     )
   `)
 
-  // Create index for vector similarity search
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS links_embedding_idx 
-    ON linkworld.links 
-    USING ivfflat (embedding vector_cosine_ops)
-    WITH (lists = 100)
-  `)
+  // Note: IVFFlat index requires data to exist first.
+  // For now, we'll use sequential scan which is fine for small datasets.
+  // Can add index later when we have 1000+ links.
 
   console.log('LinkWorld DB initialized')
 }
