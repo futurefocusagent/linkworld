@@ -12,7 +12,7 @@ import {
 import { scrapeUrl } from './firecrawl.js'
 import { embedDocument, embedQuery } from './embeddings.js'
 import { autoTagLink } from './tagger.js'
-import { generateTitle } from './titlegen.js'
+import { generateMetadata } from './titlegen.js'
 import { initImageStorage, downloadAndSaveImage, extractFirstImage, getImageUrl, getStorageDir, generatePlaceholder } from './images.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -35,12 +35,28 @@ app.post('/api/links', async (req, res) => {
     // 1. Scrape with Firecrawl
     const scraped = await scrapeUrl(url)
     
-    // 2. Generate title if needed (PDFs, etc.)
+    // 2. Generate title and description if needed (PDFs, missing OG data)
     let title = scraped.title
-    if (scraped.needsGeneratedTitle || !title) {
-      console.log('  No title found, generating...')
-      title = await generateTitle(scraped.markdown, url)
-      console.log(`  Generated title: ${title}`)
+    let ogDescription = scraped.ogDescription
+    
+    const needsTitle = scraped.needsGeneratedTitle || !title
+    const needsDescription = !ogDescription
+    
+    if (needsTitle || needsDescription) {
+      console.log(`  Generating metadata (title: ${needsTitle}, description: ${needsDescription})...`)
+      const generated = await generateMetadata(scraped.markdown, url)
+      
+      if (needsTitle) {
+        title = generated.title
+        console.log(`  Generated title: ${title}`)
+      } else {
+        console.log(`  Scraped title: ${title}`)
+      }
+      
+      if (needsDescription && generated.description) {
+        ogDescription = generated.description
+        console.log(`  Generated description: ${ogDescription}`)
+      }
     } else {
       console.log(`  Scraped: ${title}`)
     }
@@ -60,7 +76,7 @@ app.post('/api/links', async (req, res) => {
     }
 
     // 4. Generate embedding from markdown content (RETRIEVAL_DOCUMENT for storage)
-    const textForEmbedding = `${title}\n\n${scraped.ogDescription || ''}\n\n${scraped.markdown}`
+    const textForEmbedding = `${title}\n\n${ogDescription || ''}\n\n${scraped.markdown}`
     const embedding = await embedDocument(textForEmbedding)
     console.log(`  Embedding: ${embedding.length} dimensions`)
 
@@ -70,7 +86,7 @@ app.post('/api/links', async (req, res) => {
       title,
       markdown: scraped.markdown,
       ogTitle: scraped.ogTitle,
-      ogDescription: scraped.ogDescription,
+      ogDescription: ogDescription,
       ogImage: savedImage ? getImageUrl(savedImage) : undefined,
       embedding,
     })

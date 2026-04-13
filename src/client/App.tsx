@@ -208,7 +208,17 @@ export default function App() {
       {/* Header */}
       <div style={{ marginBottom: 32, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 400, marginBottom: 4, color: colors.textBright, letterSpacing: '0.05em' }}>
+          <h1
+            onClick={handleBackToList}
+            style={{
+              fontSize: 20,
+              fontWeight: 400,
+              marginBottom: 4,
+              color: colors.textBright,
+              letterSpacing: '0.05em',
+              cursor: 'pointer',
+            }}
+          >
             LINKWORLD
           </h1>
           <p style={{ color: colors.textMuted, fontSize: 12, letterSpacing: '0.02em' }}>
@@ -234,7 +244,7 @@ export default function App() {
 
       {/* Search bar */}
       {view !== 'tags' && (
-        <div style={{ marginBottom: 32, display: 'flex', gap: 0 }}>
+        <div style={{ marginBottom: 32, display: 'flex', gap: 8 }}>
           <input
             type="text"
             placeholder="search..."
@@ -246,7 +256,6 @@ export default function App() {
               padding: '14px 16px',
               borderRadius: 0,
               border: `1px solid ${colors.border}`,
-              borderRight: 'none',
               background: colors.card,
               color: colors.textBright,
               fontSize: 13,
@@ -264,8 +273,8 @@ export default function App() {
               background: colors.border,
               color: colors.textBright,
               fontSize: 12,
-              cursor: 'pointer',
-              opacity: searching || !searchQuery.trim() ? 0.3 : 1,
+              cursor: searching || !searchQuery.trim() ? 'default' : 'pointer',
+              opacity: searching || !searchQuery.trim() ? 0.4 : 1,
               letterSpacing: '0.05em',
             }}
           >
