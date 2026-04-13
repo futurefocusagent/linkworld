@@ -249,6 +249,43 @@ app.put('/api/links/:id/tags', async (req, res) => {
   }
 })
 
+// Add tags to a link (append, does not replace existing)
+app.post('/api/links/:id/tags', async (req, res) => {
+  try {
+    const linkId = parseInt(req.params.id, 10)
+    const { tags } = req.body as { tags: string[] }
+
+    if (!Array.isArray(tags)) {
+      return res.status(400).json({ error: 'tags array required' })
+    }
+
+    const link = await getLinkById(linkId)
+    if (!link) {
+      return res.status(404).json({ error: 'Link not found' })
+    }
+
+    // Resolve each new tag (create or find existing, with semantic dedup)
+    const resolvedNew = await Promise.all(
+      tags.map(async name => {
+        const embedding = await embedQuery(name)
+        return resolveTag(name, embedding, 0.85)
+      })
+    )
+
+    // Merge with existing tag IDs
+    const existing = await getLinkTags(linkId)
+    const existingIds = new Set(existing.map(t => t.id))
+    for (const t of resolvedNew) existingIds.add(t.id)
+
+    await setLinkTags(linkId, [...existingIds])
+
+    const updated = await getLinkTags(linkId)
+    res.json({ tags: updated })
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message })
+  }
+})
+
 // ============ TAG ENDPOINTS ============
 
 // Get all tags with counts

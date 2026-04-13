@@ -463,16 +463,18 @@ function LinkCard({
         {/* Tags */}
         {link.tags && link.tags.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
-            {link.tags.map(tag => (
+            {link.tags.map(tag => {
+              const isAt = tag.name.startsWith('@')
+              return (
               <button
                 key={tag.id}
                 onClick={() => onTagClick(tag)}
                 style={{
                   padding: '3px 8px',
                   borderRadius: 0,
-                  border: `1px solid ${colors.border}`,
-                  background: 'transparent',
-                  color: colors.textMuted,
+                  border: `1px solid ${isAt ? '#6b3a00' : colors.border}`,
+                  background: isAt ? '#1a0e00' : 'transparent',
+                  color: isAt ? '#e07020' : colors.textMuted,
                   fontSize: 10,
                   cursor: 'pointer',
                   letterSpacing: '0.02em',
@@ -480,7 +482,8 @@ function LinkCard({
               >
                 {tag.name}
               </button>
-            ))}
+              )
+            })}
           </div>
         )}
 
@@ -609,7 +612,9 @@ function TagsView({
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {tags.map(tag => (
+        {tags.map(tag => {
+          const isAt = tag.name.startsWith('@')
+          return (
           <div
             key={tag.id}
             style={{
@@ -617,8 +622,8 @@ function TagsView({
               alignItems: 'center',
               gap: 10,
               padding: '10px 14px',
-              background: mergeSource?.id === tag.id ? colors.border : colors.card,
-              border: `1px solid ${colors.border}`,
+              background: mergeSource?.id === tag.id ? colors.border : (isAt ? '#1a0e00' : colors.card),
+              border: `1px solid ${isAt ? '#6b3a00' : colors.border}`,
             }}
           >
             <button
@@ -626,7 +631,7 @@ function TagsView({
               style={{
                 background: 'none',
                 border: 'none',
-                color: colors.textBright,
+                color: isAt ? '#e07020' : colors.textBright,
                 fontSize: 12,
                 cursor: 'pointer',
                 padding: 0,
@@ -666,7 +671,8 @@ function TagsView({
               ×
             </button>
           </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
