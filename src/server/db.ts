@@ -242,10 +242,10 @@ export async function setLinkTags(linkId: number, tagIds: number[]): Promise<voi
   }
 }
 
-// Get tags for a link
+// Get tags for a link (excludes embeddings)
 export async function getLinkTags(linkId: number): Promise<Tag[]> {
   const result = await pool.query<Tag>(
-    `SELECT t.* FROM linkworld.tags t
+    `SELECT t.id, t.name, t.created_at FROM linkworld.tags t
      JOIN linkworld.link_tags lt ON lt.tag_id = t.id
      WHERE lt.link_id = $1
      ORDER BY t.name`,
