@@ -262,7 +262,7 @@ export async function getAllTags(): Promise<(Tag & { count: number })[]> {
      FROM linkworld.tags t
      LEFT JOIN linkworld.link_tags lt ON lt.tag_id = t.id
      GROUP BY t.id
-     ORDER BY CASE WHEN t.name LIKE '@%' THEN 0 ELSE 1 END, t.name`
+     ORDER BY CASE WHEN t.name LIKE '@%' THEN 0 WHEN t.name LIKE '#%' THEN 1 ELSE 2 END, t.name`
   )
   return result.rows
 }

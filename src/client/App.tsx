@@ -465,6 +465,7 @@ function LinkCard({
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
             {link.tags.map(tag => {
               const isAt = tag.name.startsWith('@')
+              const isHash = tag.name.startsWith('#')
               return (
               <button
                 key={tag.id}
@@ -472,9 +473,9 @@ function LinkCard({
                 style={{
                   padding: '3px 8px',
                   borderRadius: 0,
-                  border: `1px solid ${isAt ? '#6b3a00' : colors.border}`,
-                  background: isAt ? '#1a0e00' : 'transparent',
-                  color: isAt ? '#e07020' : colors.textMuted,
+                  border: `1px solid ${isAt ? '#6b3a00' : isHash ? '#1e40af' : colors.border}`,
+                  background: isAt ? '#1a0e00' : isHash ? '#0c1929' : 'transparent',
+                  color: isAt ? '#e07020' : isHash ? '#3b82f6' : colors.textMuted,
                   fontSize: 10,
                   cursor: 'pointer',
                   letterSpacing: '0.02em',
@@ -614,6 +615,7 @@ function TagsView({
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         {tags.map(tag => {
           const isAt = tag.name.startsWith('@')
+          const isHash = tag.name.startsWith('#')
           return (
           <div
             key={tag.id}
@@ -622,8 +624,8 @@ function TagsView({
               alignItems: 'center',
               gap: 10,
               padding: '10px 14px',
-              background: mergeSource?.id === tag.id ? colors.border : (isAt ? '#1a0e00' : colors.card),
-              border: `1px solid ${isAt ? '#6b3a00' : colors.border}`,
+              background: mergeSource?.id === tag.id ? colors.border : (isAt ? '#1a0e00' : isHash ? '#0c1929' : colors.card),
+              border: `1px solid ${isAt ? '#6b3a00' : isHash ? '#1e40af' : colors.border}`,
             }}
           >
             <button
@@ -631,7 +633,7 @@ function TagsView({
               style={{
                 background: 'none',
                 border: 'none',
-                color: isAt ? '#e07020' : colors.textBright,
+                color: isAt ? '#e07020' : isHash ? '#3b82f6' : colors.textBright,
                 fontSize: 12,
                 cursor: 'pointer',
                 padding: 0,
