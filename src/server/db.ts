@@ -129,6 +129,14 @@ export async function getLinkById(id: number): Promise<Link | null> {
   return result.rows[0] ?? null
 }
 
+export async function updateLinkUrl(id: number, url: string): Promise<Link | null> {
+  const result = await pool.query<Link>(
+    `UPDATE linkworld.links SET url = $2 WHERE id = $1 RETURNING *`,
+    [id, url]
+  )
+  return result.rows[0] ?? null
+}
+
 export async function findSimilarToLink(linkId: number, limit = 20): Promise<(Link & { similarity: number })[]> {
   const result = await pool.query<Link & { similarity: number }>(
     `SELECT l2.id, l2.url, l2.title, l2.og_title, l2.og_description, l2.og_image, l2.created_at,

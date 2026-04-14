@@ -4,7 +4,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import {
   initDb, insertLink, getLinksChronological, searchLinks, searchLinksByTagText,
-  findSimilarToLink, getLinkById, getLinkCount,
+  findSimilarToLink, getLinkById, getLinkCount, updateLinkUrl,
   getAllTags, getLinkTags, setLinkTags, resolveTag,
   searchTagsByName, deleteTag, mergeTags, getLinksByTag,
   getTagById, findLinksSimilarToTag
@@ -14,6 +14,7 @@ import { embedDocument, embedQuery } from './embeddings.js'
 import { autoTagLink } from './tagger.js'
 import { generateMetadata } from './titlegen.js'
 import { initImageStorage, downloadAndSaveImage, extractFirstImage, getImageUrl, getStorageDir, generatePlaceholder } from './images.js'
+import { cleanUrl } from './url-cleaner.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -25,10 +26,13 @@ app.use(express.json())
 // Submit a new link
 app.post('/api/links', async (req, res) => {
   try {
-    const { url } = req.body
-    if (!url || typeof url !== 'string') {
+    const { url: rawUrl } = req.body
+    if (!rawUrl || typeof rawUrl !== 'string') {
       return res.status(400).json({ error: 'url required' })
     }
+
+    const url = cleanUrl(rawUrl)
+    if (url !== rawUrl) console.log(`  Cleaned URL: ${rawUrl} → ${url}`)
 
     console.log(`Processing link: ${url}`)
 
@@ -100,6 +104,28 @@ app.post('/api/links', async (req, res) => {
     res.json({ ok: true, link: { id: link.id, url: link.url, title: link.title } })
   } catch (err) {
     console.error('Error processing link:', err)
+    res.status(500).json({ error: (err as Error).message })
+  }
+})
+
+// Update a link's URL (strips tracking params automatically)
+app.patch('/api/links/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id)
+    if (isNaN(id)) return res.status(400).json({ error: 'invalid id' })
+
+    const { url: rawUrl } = req.body
+    if (!rawUrl || typeof rawUrl !== 'string') {
+      return res.status(400).json({ error: 'url required' })
+    }
+
+    const url = cleanUrl(rawUrl)
+    const link = await updateLinkUrl(id, url)
+    if (!link) return res.status(404).json({ error: 'link not found' })
+
+    res.json({ ok: true, link: { id: link.id, url: link.url, title: link.title } })
+  } catch (err) {
+    console.error('Error updating link:', err)
     res.status(500).json({ error: (err as Error).message })
   }
 })
