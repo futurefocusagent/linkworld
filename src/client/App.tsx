@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { useEffect, useState, useCallback } from 'react'
+import { BrowserRouter, Routes, Route, Link as RouterLink } from 'react-router-dom'
 import MapPage from './MapPage'
 
 interface Tag {
@@ -8,7 +8,7 @@ interface Tag {
   count?: number
 }
 
-interface Link {
+interface LinkItem {
   id: number
   url: string
   title: string
@@ -22,18 +22,6 @@ interface Link {
 
 type View = 'chronological' | 'search' | 'similar' | 'tags' | 'byTag'
 
-// Monochrome color palette
-const colors = {
-  bg: '#0a0a0a',
-  card: '#111',
-  border: '#222',
-  text: '#999',
-  textMuted: '#555',
-  textBright: '#ccc',
-  accent: '#666',
-}
-
-// Parse URL params on load
 function getInitialState() {
   const params = new URLSearchParams(window.location.search)
   const q = params.get('q')
@@ -48,17 +36,17 @@ function getInitialState() {
 
 function HomePage() {
   const initialState = getInitialState()
-  const [links, setLinks] = useState<Link[]>([])
+  const [links, setLinks] = useState<LinkItem[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<View>(initialState.view)
   const [searchQuery, setSearchQuery] = useState('searchQuery' in initialState ? initialState.searchQuery : '')
-  const [searchResults, setSearchResults] = useState<Link[]>([])
+  const [searchResults, setSearchResults] = useState<LinkItem[]>([])
   const [searching, setSearching] = useState(false)
-  const [similarSource, setSimilarSource] = useState<Link | null>(null)
+  const [similarSource, setSimilarSource] = useState<LinkItem | null>(null)
   const [allTags, setAllTags] = useState<Tag[]>([])
   const [selectedTag, setSelectedTag] = useState<Tag | null>(null)
-  const [tagSimilar, setTagSimilar] = useState<Link[]>([])
+  const [tagSimilar, setTagSimilar] = useState<LinkItem[]>([])
   const [initialized, setInitialized] = useState(false)
 
   const loadLinks = useCallback(async (background = false) => {
@@ -74,14 +62,12 @@ function HomePage() {
     loadLinks()
   }, [loadLinks])
 
-  // Handle initial URL state
   useEffect(() => {
     if (initialized) return
     setInitialized(true)
     
     const initial = getInitialState()
     if ('searchQuery' in initial && initial.searchQuery) {
-      // Run initial search
       setSearching(true)
       fetch(`/api/search?q=${encodeURIComponent(initial.searchQuery)}`)
         .then(res => res.json())
@@ -90,7 +76,6 @@ function HomePage() {
           setSearching(false)
         })
     } else if ('tagName' in initial && initial.tagName) {
-      // Load tag by name
       fetch('/api/tags')
         .then(res => res.json())
         .then(data => {
@@ -109,7 +94,6 @@ function HomePage() {
           }
         })
     } else if ('similarId' in initial && initial.similarId) {
-      // Load similar to link
       fetch(`/api/links/${initial.similarId}`)
         .then(res => res.json())
         .then(link => {
@@ -124,12 +108,9 @@ function HomePage() {
     }
   }, [initialized])
 
-  // Reload on tab focus (background, no flash)
   useEffect(() => {
     const handleFocus = () => {
-      if (view === 'chronological') {
-        loadLinks(true)
-      }
+      if (view === 'chronological') loadLinks(true)
     }
     window.addEventListener('focus', handleFocus)
     return () => window.removeEventListener('focus', handleFocus)
@@ -139,7 +120,6 @@ function HomePage() {
     if (!searchQuery.trim()) return
     setSearching(true)
     setView('search')
-    // Update URL
     window.history.pushState({}, '', `?q=${encodeURIComponent(searchQuery)}`)
     try {
       const res = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}`)
@@ -151,11 +131,10 @@ function HomePage() {
     setSearching(false)
   }, [searchQuery])
 
-  const handleFindSimilar = useCallback(async (link: Link) => {
+  const handleFindSimilar = useCallback(async (link: LinkItem) => {
     setSearching(true)
     setView('similar')
     setSimilarSource(link)
-    // Update URL
     window.history.pushState({}, '', `?similar=${link.id}`)
     try {
       const res = await fetch(`/api/links/${link.id}/similar`)
@@ -181,7 +160,6 @@ function HomePage() {
   const handleFilterByTag = useCallback(async (tag: Tag) => {
     setSelectedTag(tag)
     setView('byTag')
-    // Update URL
     window.history.pushState({}, '', `?tag=${encodeURIComponent(tag.name)}`)
     setLoading(true)
     const res = await fetch(`/api/tags/${tag.id}`)
@@ -198,7 +176,6 @@ function HomePage() {
     setSearchQuery('')
     setSelectedTag(null)
     setTagSimilar([])
-    // Clear URL params
     window.history.pushState({}, '', window.location.pathname)
     loadLinks()
   }
@@ -206,79 +183,51 @@ function HomePage() {
   const displayLinks = view === 'chronological' || view === 'byTag' ? links : searchResults
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px' }}>
+    <div className="max-w-5xl mx-auto p-6 bg-zinc-950 min-h-screen">
       {/* Header */}
-      <div style={{ marginBottom: 32, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div className="mb-8 flex items-center justify-between">
         <div>
           <h1
             onClick={handleBackToList}
-            style={{
-              fontSize: 20,
-              fontWeight: 400,
-              marginBottom: 4,
-              color: colors.textBright,
-              letterSpacing: '0.05em',
-              cursor: 'pointer',
-            }}
+            className="text-xl text-zinc-300 tracking-wider cursor-pointer hover:text-white"
           >
             LINKWORLD
           </h1>
-          <p style={{ color: colors.textMuted, fontSize: 12, letterSpacing: '0.02em' }}>
+          <p className="text-zinc-600 text-xs tracking-wide">
             {total} links · semantic bookmarks
           </p>
         </div>
-        <button
-          onClick={handleShowTags}
-          style={{
-            padding: '8px 16px',
-            borderRadius: 0,
-            border: `1px solid ${colors.border}`,
-            background: view === 'tags' ? colors.border : 'transparent',
-            color: colors.text,
-            fontSize: 12,
-            cursor: 'pointer',
-            letterSpacing: '0.05em',
-          }}
-        >
-          TAGS
-        </button>
+        <div className="flex gap-2">
+          <RouterLink
+            to="/map"
+            className="px-4 py-2 border border-zinc-800 text-zinc-400 text-xs tracking-wider hover:bg-zinc-800"
+          >
+            MAP
+          </RouterLink>
+          <button
+            onClick={handleShowTags}
+            className={`px-4 py-2 border border-zinc-800 text-zinc-400 text-xs tracking-wider ${view === 'tags' ? 'bg-zinc-800' : 'hover:bg-zinc-800'}`}
+          >
+            TAGS
+          </button>
+        </div>
       </div>
 
       {/* Search bar */}
       {view !== 'tags' && (
-        <div style={{ marginBottom: 32, display: 'flex', gap: 8 }}>
+        <div className="mb-8 flex gap-2">
           <input
             type="text"
             placeholder="search..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSearch()}
-            style={{
-              flex: 1,
-              padding: '14px 16px',
-              borderRadius: 0,
-              border: `1px solid ${colors.border}`,
-              background: colors.card,
-              color: colors.textBright,
-              fontSize: 13,
-              outline: 'none',
-              letterSpacing: '0.02em',
-            }}
+            className="flex-1 px-4 py-3 border border-zinc-800 bg-zinc-900 text-zinc-300 text-sm outline-none focus:border-zinc-600"
           />
           <button
             onClick={handleSearch}
             disabled={searching || !searchQuery.trim()}
-            style={{
-              padding: '14px 24px',
-              borderRadius: 0,
-              border: `1px solid ${colors.border}`,
-              background: colors.border,
-              color: colors.textBright,
-              fontSize: 12,
-              cursor: searching || !searchQuery.trim() ? 'default' : 'pointer',
-              opacity: searching || !searchQuery.trim() ? 0.4 : 1,
-              letterSpacing: '0.05em',
-            }}
+            className="px-6 py-3 border border-zinc-800 bg-zinc-800 text-zinc-300 text-xs tracking-wider disabled:opacity-40"
           >
             {searching ? '...' : 'SEARCH'}
           </button>
@@ -287,16 +236,8 @@ function HomePage() {
 
       {/* View indicator */}
       {view !== 'chronological' && view !== 'tags' && (
-        <div style={{
-          marginBottom: 24,
-          padding: '12px 16px',
-          background: colors.card,
-          border: `1px solid ${colors.border}`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}>
-          <span style={{ color: colors.textMuted, fontSize: 11, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+        <div className="mb-6 p-3 bg-zinc-900 border border-zinc-800 flex items-center justify-between">
+          <span className="text-zinc-600 text-xs tracking-wider uppercase">
             {view === 'search' && `results for "${searchQuery}"`}
             {view === 'similar' && `similar to: ${similarSource?.title?.slice(0, 40)}...`}
             {view === 'byTag' && `tag: ${selectedTag?.name}`}
@@ -304,16 +245,7 @@ function HomePage() {
           </span>
           <button
             onClick={handleBackToList}
-            style={{
-              padding: '6px 12px',
-              borderRadius: 0,
-              border: `1px solid ${colors.border}`,
-              background: 'transparent',
-              color: colors.textMuted,
-              fontSize: 11,
-              cursor: 'pointer',
-              letterSpacing: '0.05em',
-            }}
+            className="px-3 py-1 border border-zinc-800 text-zinc-600 text-xs tracking-wider hover:text-zinc-400"
           >
             ← BACK
           </button>
@@ -329,21 +261,21 @@ function HomePage() {
           onBack={handleBackToList}
         />
       ) : loading ? (
-        <div style={{ textAlign: 'center', padding: 80, color: colors.textMuted, fontSize: 12, letterSpacing: '0.1em' }}>
+        <div className="text-center py-20 text-zinc-600 text-xs tracking-widest">
           LOADING...
         </div>
       ) : displayLinks.length === 0 && tagSimilar.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 80, color: colors.textMuted, fontSize: 12, letterSpacing: '0.05em' }}>
+        <div className="text-center py-20 text-zinc-600 text-xs tracking-wider">
           {view === 'chronological' ? 'NO LINKS YET' : 'NO RESULTS'}
         </div>
       ) : (
         <>
           {view === 'byTag' && displayLinks.length > 0 && (
-            <h3 style={{ color: colors.textMuted, fontSize: 10, marginBottom: 16, letterSpacing: '0.1em' }}>
+            <h3 className="text-zinc-600 text-xs mb-4 tracking-widest">
               TAGGED "{selectedTag?.name?.toUpperCase()}" ({displayLinks.length})
             </h3>
           )}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+          <div className="flex flex-col">
             {displayLinks.map((link, idx) => (
               <LinkCard
                 key={link.id}
@@ -358,10 +290,10 @@ function HomePage() {
           
           {view === 'byTag' && tagSimilar.length > 0 && (
             <>
-              <h3 style={{ color: colors.textMuted, fontSize: 10, margin: '32px 0 16px', letterSpacing: '0.1em' }}>
+              <h3 className="text-zinc-600 text-xs mt-8 mb-4 tracking-widest">
                 SEMANTICALLY SIMILAR ({tagSimilar.length})
               </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+              <div className="flex flex-col">
                 {tagSimilar.map((link, idx) => (
                   <LinkCard
                     key={link.id}
@@ -388,7 +320,7 @@ function LinkCard({
   showSimilarity,
   isFirst = false,
 }: {
-  link: Link
+  link: LinkItem
   onFindSimilar: () => void
   onTagClick: (tag: Tag) => void
   showSimilarity: boolean
@@ -398,133 +330,75 @@ function LinkCard({
   const domain = new URL(link.url).hostname.replace('www.', '')
 
   return (
-    <div
-      style={{
-        background: colors.card,
-        borderLeft: `1px solid ${colors.border}`,
-        borderRight: `1px solid ${colors.border}`,
-        borderBottom: `1px solid ${colors.border}`,
-        borderTop: isFirst ? `1px solid ${colors.border}` : 'none',
-        padding: 20,
-        display: 'flex',
-        gap: 20,
-      }}
-    >
-      {/* Large image */}
+    <div className={`bg-zinc-900 border-l border-r border-b border-zinc-800 ${isFirst ? 'border-t' : ''} p-5 flex gap-5`}>
       {link.og_image && (
-        <div style={{ flexShrink: 0 }}>
+        <div className="flex-shrink-0">
           <img
             src={link.og_image}
             alt=""
-            style={{
-              width: 160,
-              height: 120,
-              objectFit: 'cover',
-              background: '#000',
-            }}
+            className="w-40 h-28 object-cover bg-black"
             onError={e => (e.currentTarget.style.display = 'none')}
           />
         </div>
       )}
 
-      {/* Content */}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div className="flex-1 min-w-0">
         <a
           href={link.url}
           target="_blank"
           rel="noopener noreferrer"
-          style={{
-            color: colors.textBright,
-            textDecoration: 'none',
-            fontWeight: 400,
-            fontSize: 14,
-            display: 'block',
-            marginBottom: 8,
-            lineHeight: 1.4,
-          }}
+          className="text-zinc-300 text-sm block mb-2 leading-snug hover:text-white"
         >
           {displayTitle}
         </a>
 
         {link.og_description && (
-          <p style={{
-            color: colors.textMuted,
-            fontSize: 12,
-            marginBottom: 12,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            lineHeight: 1.5,
-          }}>
+          <p className="text-zinc-600 text-xs mb-3 line-clamp-2 leading-relaxed">
             {link.og_description}
           </p>
         )}
 
-        {/* Tags */}
         {link.tags && link.tags.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+          <div className="flex flex-wrap gap-1.5 mb-3">
             {link.tags.map(tag => {
               const isAt = tag.name.startsWith('@')
               const isHash = tag.name.startsWith('#')
               return (
-              <button
-                key={tag.id}
-                onClick={() => onTagClick(tag)}
-                style={{
-                  padding: '3px 8px',
-                  borderRadius: 0,
-                  border: `1px solid ${isAt ? '#6b3a00' : isHash ? '#1e40af' : colors.border}`,
-                  background: isAt ? '#1a0e00' : isHash ? '#0c1929' : 'transparent',
-                  color: isAt ? '#e07020' : isHash ? '#3b82f6' : colors.textMuted,
-                  fontSize: 10,
-                  cursor: 'pointer',
-                  letterSpacing: '0.02em',
-                }}
-              >
-                {tag.name}
-              </button>
+                <button
+                  key={tag.id}
+                  onClick={() => onTagClick(tag)}
+                  className={`px-2 py-0.5 text-xs border cursor-pointer ${
+                    isAt 
+                      ? 'border-orange-900 bg-orange-950 text-orange-500' 
+                      : isHash 
+                        ? 'border-blue-900 bg-blue-950 text-blue-400'
+                        : 'border-zinc-800 text-zinc-600 hover:text-zinc-400'
+                  }`}
+                >
+                  {tag.name}
+                </button>
               )
             })}
           </div>
         )}
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 10, letterSpacing: '0.02em' }}>
-          <span style={{ color: colors.textMuted }}>{domain}</span>
-          <span style={{ color: colors.border }}>·</span>
-          <span style={{ color: colors.textMuted }}>
-            {new Date(link.created_at).toLocaleDateString()}
-          </span>
+        <div className="flex items-center gap-4 text-xs text-zinc-600">
+          <span>{domain}</span>
+          <span className="text-zinc-800">·</span>
+          <span>{new Date(link.created_at).toLocaleDateString()}</span>
           {showSimilarity && link.similarity !== undefined && (
             <>
-              <span style={{ color: colors.border }}>·</span>
-              <span style={{ color: colors.text }}>
-                {(link.similarity * 100).toFixed(0)}%
-              </span>
+              <span className="text-zinc-800">·</span>
+              <span className="text-zinc-400">{(link.similarity * 100).toFixed(0)}%</span>
             </>
           )}
         </div>
       </div>
 
-      {/* Find similar button */}
       <button
         onClick={onFindSimilar}
         title="Find similar"
-        style={{
-          flexShrink: 0,
-          width: 40,
-          height: 40,
-          borderRadius: 0,
-          border: `1px solid ${colors.border}`,
-          background: 'transparent',
-          color: colors.textMuted,
-          fontSize: 14,
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
+        className="flex-shrink-0 w-10 h-10 border border-zinc-800 text-zinc-600 text-sm flex items-center justify-center hover:text-zinc-400 hover:border-zinc-600"
       >
         ⌕
       </button>
@@ -565,32 +439,15 @@ function TagsView({
 
   return (
     <div>
-      <div style={{
-        marginBottom: 24,
-        padding: '12px 16px',
-        background: colors.card,
-        border: `1px solid ${colors.border}`,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-      }}>
-        <span style={{ color: colors.textMuted, fontSize: 11, letterSpacing: '0.05em' }}>
+      <div className="mb-6 p-3 bg-zinc-900 border border-zinc-800 flex items-center justify-between">
+        <span className="text-zinc-600 text-xs tracking-wider">
           {tags.length} TAGS
           {mergeSource && (
-            <span style={{ color: colors.text, marginLeft: 16 }}>
+            <span className="text-zinc-400 ml-4">
               MERGING "{mergeSource.name}" → CLICK TARGET
               <button
                 onClick={() => setMergeSource(null)}
-                style={{
-                  marginLeft: 12,
-                  padding: '2px 8px',
-                  borderRadius: 0,
-                  border: `1px solid ${colors.border}`,
-                  background: 'transparent',
-                  color: colors.textMuted,
-                  fontSize: 10,
-                  cursor: 'pointer',
-                }}
+                className="ml-3 px-2 py-0.5 border border-zinc-800 text-zinc-600 text-xs hover:text-zinc-400"
               >
                 CANCEL
               </button>
@@ -599,82 +456,51 @@ function TagsView({
         </span>
         <button
           onClick={onBack}
-          style={{
-            padding: '6px 12px',
-            borderRadius: 0,
-            border: `1px solid ${colors.border}`,
-            background: 'transparent',
-            color: colors.textMuted,
-            fontSize: 11,
-            cursor: 'pointer',
-            letterSpacing: '0.05em',
-          }}
+          className="px-3 py-1 border border-zinc-800 text-zinc-600 text-xs tracking-wider hover:text-zinc-400"
         >
           ← BACK
         </button>
       </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+      <div className="flex flex-wrap gap-2">
         {tags.map(tag => {
           const isAt = tag.name.startsWith('@')
           const isHash = tag.name.startsWith('#')
           return (
-          <div
-            key={tag.id}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '10px 14px',
-              background: mergeSource?.id === tag.id ? colors.border : (isAt ? '#1a0e00' : isHash ? '#0c1929' : colors.card),
-              border: `1px solid ${isAt ? '#6b3a00' : isHash ? '#1e40af' : colors.border}`,
-            }}
-          >
-            <button
-              onClick={() => mergeSource ? handleMerge(tag) : onTagClick(tag)}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: isAt ? '#e07020' : isHash ? '#3b82f6' : colors.textBright,
-                fontSize: 12,
-                cursor: 'pointer',
-                padding: 0,
-              }}
+            <div
+              key={tag.id}
+              className={`flex items-center gap-2 px-3 py-2 border ${
+                mergeSource?.id === tag.id 
+                  ? 'bg-zinc-800 border-zinc-700' 
+                  : isAt 
+                    ? 'bg-orange-950 border-orange-900' 
+                    : isHash 
+                      ? 'bg-blue-950 border-blue-900'
+                      : 'bg-zinc-900 border-zinc-800'
+              }`}
             >
-              {tag.name}
-            </button>
-            <span style={{ color: colors.textMuted, fontSize: 11 }}>
-              {tag.count}
-            </span>
-            <button
-              onClick={() => setMergeSource(tag)}
-              title="Merge into another tag"
-              style={{
-                background: 'none',
-                border: 'none',
-                color: colors.textMuted,
-                fontSize: 11,
-                cursor: 'pointer',
-                padding: '0 4px',
-              }}
-            >
-              ⎇
-            </button>
-            <button
-              onClick={() => handleDelete(tag)}
-              title="Delete tag"
-              style={{
-                background: 'none',
-                border: 'none',
-                color: colors.textMuted,
-                fontSize: 11,
-                cursor: 'pointer',
-                padding: '0 4px',
-              }}
-            >
-              ×
-            </button>
-          </div>
+              <button
+                onClick={() => mergeSource ? handleMerge(tag) : onTagClick(tag)}
+                className={`text-xs ${isAt ? 'text-orange-500' : isHash ? 'text-blue-400' : 'text-zinc-300'}`}
+              >
+                {tag.name}
+              </button>
+              <span className="text-zinc-600 text-xs">{tag.count}</span>
+              <button
+                onClick={() => setMergeSource(tag)}
+                title="Merge into another tag"
+                className="text-zinc-600 text-xs px-1 hover:text-zinc-400"
+              >
+                ⎇
+              </button>
+              <button
+                onClick={() => handleDelete(tag)}
+                title="Delete tag"
+                className="text-zinc-600 text-xs px-1 hover:text-zinc-400"
+              >
+                ×
+              </button>
+            </div>
           )
         })}
       </div>
