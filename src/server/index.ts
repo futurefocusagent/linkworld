@@ -312,6 +312,40 @@ app.post('/api/links/:id/tags', async (req, res) => {
   }
 })
 
+// Re-tag a link with AI, preserving deliberate tags (# and @ prefixed)
+app.post('/api/links/:id/retag', async (req, res) => {
+  try {
+    const linkId = parseInt(req.params.id, 10)
+    const link = await getLinkById(linkId)
+    if (!link) return res.status(404).json({ error: 'Link not found' })
+
+    const linkWithContent = link as typeof link & { markdown?: string; title: string }
+
+    // Capture deliberate tags (# and @) before autoTagLink overwrites them
+    const existing = await getLinkTags(linkId)
+    const deliberate = existing.filter(t => t.name.startsWith('#') || t.name.startsWith('@'))
+
+    // Run auto-tagger (calls setLinkTags internally, replacing all tags)
+    const { tags: autoTags } = await autoTagLink(
+      linkId,
+      linkWithContent.title,
+      linkWithContent.markdown || ''
+    )
+
+    // Merge auto tags with preserved deliberate tags
+    const merged = new Map(autoTags.map(t => [t.id, t]))
+    for (const t of deliberate) merged.set(t.id, t)
+
+    await setLinkTags(linkId, [...merged.keys()])
+
+    const finalTags = await getLinkTags(linkId)
+    res.json({ ok: true, tags: finalTags, preserved: deliberate.map(t => t.name) })
+  } catch (err) {
+    console.error('Error retagging link:', err)
+    res.status(500).json({ error: (err as Error).message })
+  }
+})
+
 // ============ TAG ENDPOINTS ============
 
 // Get all tags with counts
