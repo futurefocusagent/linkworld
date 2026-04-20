@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
-body {
+html, body {
   font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+  background-color: #09090b; /* zinc-950 */
+  color: #a1a1aa; /* zinc-400 */
+  min-height: 100vh;
 }

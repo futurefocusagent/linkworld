@@ -1,4 +1,10 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { Link } from 'react-router-dom'
+
+interface Tag {
+  id: number
+  name: string
+}
 
 interface Point {
   id: number
@@ -8,6 +14,13 @@ interface Point {
   url: string
   og_description: string | null
   og_image: string | null
+  tags: Tag[]
+}
+
+interface ClusterLabel {
+  x: number
+  y: number
+  tags: string[]
 }
 
 export default function MapPage() {
@@ -42,7 +55,7 @@ export default function MapPage() {
   // Normalize coordinates to viewport
   const width = 800
   const height = 600
-  const padding = 40
+  const padding = 60
   
   const xMin = Math.min(...points.map(p => p.x), 0)
   const xMax = Math.max(...points.map(p => p.x), 1)
@@ -52,11 +65,65 @@ export default function MapPage() {
   const scaleX = (x: number) => padding + ((x - xMin) / (xMax - xMin || 1)) * (width - padding * 2)
   const scaleY = (y: number) => padding + ((y - yMin) / (yMax - yMin || 1)) * (height - padding * 2)
 
-  // Color based on title hash
-  const getColor = (title: string) => {
+  // Compute cluster labels based on spatial proximity and shared tags
+  const clusterLabels = useMemo(() => {
+    if (points.length < 5) return []
+    
+    const gridSize = 80 // pixels per grid cell
+    const cells: Map<string, Point[]> = new Map()
+    
+    // Group points into grid cells
+    for (const p of points) {
+      const cx = Math.floor(scaleX(p.x) / gridSize)
+      const cy = Math.floor(scaleY(p.y) / gridSize)
+      const key = `${cx},${cy}`
+      if (!cells.has(key)) cells.set(key, [])
+      cells.get(key)!.push(p)
+    }
+    
+    const labels: ClusterLabel[] = []
+    
+    for (const [key, cellPoints] of cells) {
+      if (cellPoints.length < 2) continue // need at least 2 points for a cluster
+      
+      // Count tag frequency in this cell
+      const tagCounts: Map<string, number> = new Map()
+      for (const p of cellPoints) {
+        for (const tag of p.tags || []) {
+          // Skip action/project tags for cleaner labels
+          if (tag.name.startsWith('@') || tag.name.startsWith('#')) continue
+          tagCounts.set(tag.name, (tagCounts.get(tag.name) || 0) + 1)
+        }
+      }
+      
+      // Get tags shared by at least 40% of points in the cell
+      const threshold = Math.max(2, Math.floor(cellPoints.length * 0.4))
+      const sharedTags = [...tagCounts.entries()]
+        .filter(([, count]) => count >= threshold)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, Math.min(3, Math.ceil(cellPoints.length / 3))) // more points = more tags
+        .map(([name]) => name)
+      
+      if (sharedTags.length === 0) continue
+      
+      // Position label at centroid of cell
+      const [cx, cy] = key.split(',').map(Number)
+      labels.push({
+        x: (cx + 0.5) * gridSize,
+        y: (cy + 0.5) * gridSize,
+        tags: sharedTags,
+      })
+    }
+    
+    return labels
+  }, [points, scaleX, scaleY])
+
+  // Color based on primary tag or title hash
+  const getColor = (point: Point) => {
+    const tag = point.tags?.[0]?.name || point.title
     let hash = 0
-    for (let i = 0; i < title.length; i++) {
-      hash = title.charCodeAt(i) + ((hash << 5) - hash)
+    for (let i = 0; i < tag.length; i++) {
+      hash = tag.charCodeAt(i) + ((hash << 5) - hash)
     }
     const hue = Math.abs(hash) % 360
     return `hsl(${hue}, 70%, 60%)`
@@ -90,26 +157,29 @@ export default function MapPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-zinc-900 text-white flex items-center justify-center">
-        <p>Loading UMAP visualization...</p>
+      <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">
+        <p className="text-zinc-400">Loading UMAP visualization...</p>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-zinc-900 text-white p-4">
+    <div className="min-h-screen bg-zinc-950 text-white p-4">
       <div className="flex justify-between items-center mb-4">
-        <h1 className="text-2xl font-bold">Link Map ({points.length} links)</h1>
+        <div className="flex items-center gap-4">
+          <Link to="/" className="text-zinc-500 hover:text-zinc-300 text-sm">← Back</Link>
+          <h1 className="text-xl text-zinc-300">Link Map ({points.length} links)</h1>
+        </div>
         <button
           onClick={recalculate}
           disabled={recalculating}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-600 rounded text-sm"
+          className="px-4 py-2 border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 disabled:opacity-50 text-sm"
         >
           {recalculating ? 'Recalculating...' : 'Recalculate UMAP'}
         </button>
       </div>
 
-      <div className="relative border border-zinc-700 rounded overflow-hidden">
+      <div className="relative border border-zinc-800 overflow-hidden">
         <svg
           ref={svgRef}
           width="100%"
@@ -123,13 +193,28 @@ export default function MapPage() {
           onWheel={handleWheel}
         >
           <g transform={`translate(${transform.x}, ${transform.y}) scale(${transform.scale})`}>
+            {/* Cluster labels */}
+            {clusterLabels.map((label, i) => (
+              <text
+                key={`label-${i}`}
+                x={label.x}
+                y={label.y}
+                className="fill-zinc-600 text-[10px] pointer-events-none"
+                textAnchor="middle"
+                dominantBaseline="middle"
+              >
+                {label.tags.join(' · ')}
+              </text>
+            ))}
+            
+            {/* Points */}
             {points.map(point => (
               <circle
                 key={point.id}
                 cx={scaleX(point.x)}
                 cy={scaleY(point.y)}
                 r={4}
-                fill={getColor(point.title)}
+                fill={getColor(point)}
                 className="cursor-pointer hover:opacity-80"
                 onMouseEnter={() => setHovered(point)}
                 onMouseLeave={() => setHovered(null)}
@@ -141,11 +226,11 @@ export default function MapPage() {
         {/* Hover tooltip */}
         {hovered && (
           <div
-            className="absolute pointer-events-none bg-zinc-800 rounded-lg shadow-xl p-3 max-w-xs z-50"
+            className="pointer-events-none bg-zinc-900 border border-zinc-700 shadow-xl p-3 max-w-xs z-50"
             style={{
+              position: 'fixed',
               left: Math.min(mousePos.x + 10, window.innerWidth - 320),
               top: mousePos.y + 10,
-              position: 'fixed'
             }}
           >
             <div className="flex gap-3">
@@ -153,25 +238,33 @@ export default function MapPage() {
                 <img
                   src={hovered.og_image}
                   alt=""
-                  className="w-12 h-12 rounded object-cover flex-shrink-0"
+                  className="w-12 h-12 object-cover flex-shrink-0"
                 />
               )}
               <div className="min-w-0">
-                <h3 className="font-semibold text-sm truncate">{hovered.title}</h3>
+                <h3 className="font-medium text-sm text-zinc-200 truncate">{hovered.title}</h3>
                 {hovered.og_description && (
-                  <p className="text-xs text-zinc-400 line-clamp-2 mt-1">
+                  <p className="text-xs text-zinc-500 line-clamp-2 mt-1">
                     {hovered.og_description}
                   </p>
                 )}
-                <p className="text-xs text-zinc-500 truncate mt-1">{hovered.url}</p>
+                {hovered.tags && hovered.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {hovered.tags.slice(0, 5).map(tag => (
+                      <span key={tag.id} className="text-[10px] text-zinc-600 bg-zinc-800 px-1">
+                        {tag.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
         )}
       </div>
 
-      <p className="text-xs text-zinc-500 mt-2">
-        Drag to pan, scroll to zoom. Hover over points to see link details.
+      <p className="text-xs text-zinc-600 mt-2">
+        Drag to pan, scroll to zoom. Hover over points to see details. Labels show common tags in clusters.
       </p>
     </div>
   )
