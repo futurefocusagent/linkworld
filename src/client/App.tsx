@@ -1,4 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import MapPage from './MapPage'
 
 interface Tag {
   id: number
@@ -44,7 +46,7 @@ function getInitialState() {
   return { view: 'chronological' as View }
 }
 
-export default function App() {
+function HomePage() {
   const initialState = getInitialState()
   const [links, setLinks] = useState<Link[]>([])
   const [total, setTotal] = useState(0)
@@ -677,5 +679,16 @@ function TagsView({
         })}
       </div>
     </div>
+  )
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/map" element={<MapPage />} />
+      </Routes>
+    </BrowserRouter>
   )
 }

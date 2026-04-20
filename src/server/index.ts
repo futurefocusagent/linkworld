@@ -7,7 +7,9 @@ import {
   findSimilarToLink, getLinkById, getLinkCount, updateLinkUrl,
   getAllTags, getLinkTags, setLinkTags, resolveTag,
   searchTagsByName, deleteTag, mergeTags, getLinksByTag,
-  getTagById, findLinksSimilarToTag
+  getTagById, findLinksSimilarToTag,
+  getAllLinksWithEmbeddings, getTagsForLinks,
+  type Tag
 } from './db.js'
 import { scrapeUrl } from './firecrawl.js'
 import { embedDocument, embedQuery } from './embeddings.js'
@@ -15,6 +17,57 @@ import { autoTagLink } from './tagger.js'
 import { generateMetadata } from './titlegen.js'
 import { initImageStorage, downloadAndSaveImage, extractFirstImage, getImageUrl, getStorageDir, generatePlaceholder } from './images.js'
 import { cleanUrl } from './url-cleaner.js'
+import fs from 'fs'
+import { UMAP } from 'umap-js'
+
+// ============ UMAP CACHE ============
+const UMAP_CACHE_PATH = path.join(process.cwd(), 'umap.json')
+
+interface UmapPoint {
+  id: number
+  x: number
+  y: number
+  title: string
+  url: string
+  og_description: string | null
+  og_image: string | null
+  tags: Tag[]
+}
+
+interface UmapCache {
+  points: UmapPoint[]
+  generatedAt: string
+}
+
+async function computeUmap(): Promise<UmapCache> {
+  const links = await getAllLinksWithEmbeddings()
+  if (links.length < 4) {
+    throw new Error(`Need at least 4 links with embeddings, have ${links.length}`)
+  }
+
+  const embeddings = links.map(l => l.embedding_text.slice(1, -1).split(',').map(Number))
+  const nNeighbors = Math.min(15, links.length - 1)
+  const umap = new UMAP({ nComponents: 2, nNeighbors, minDist: 0.1 })
+  const coords = umap.fit(embeddings)
+
+  const linkIds = links.map(l => l.id)
+  const tagsMap = await getTagsForLinks(linkIds)
+
+  const points: UmapPoint[] = links.map((link, i) => ({
+    id: link.id,
+    x: coords[i][0],
+    y: coords[i][1],
+    title: link.title,
+    url: link.url,
+    og_description: link.og_description,
+    og_image: link.og_image,
+    tags: tagsMap[link.id] ?? [],
+  }))
+
+  const cache: UmapCache = { points, generatedAt: new Date().toISOString() }
+  fs.writeFileSync(UMAP_CACHE_PATH, JSON.stringify(cache))
+  return cache
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -481,6 +534,33 @@ app.post('/api/admin/backfill-images', async (req, res) => {
     }
     
     res.json({ ok: true, results })
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message })
+  }
+})
+
+// ============ UMAP ENDPOINTS ============
+
+// Get UMAP coordinates (file-cached)
+app.get('/api/umap', async (_req, res) => {
+  try {
+    if (fs.existsSync(UMAP_CACHE_PATH)) {
+      const cached = JSON.parse(fs.readFileSync(UMAP_CACHE_PATH, 'utf8')) as UmapCache
+      return res.json(cached)
+    }
+    const result = await computeUmap()
+    res.json(result)
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message })
+  }
+})
+
+// Recalculate UMAP (deletes cache and recomputes)
+app.post('/api/umap/recalculate', async (_req, res) => {
+  try {
+    if (fs.existsSync(UMAP_CACHE_PATH)) fs.unlinkSync(UMAP_CACHE_PATH)
+    const result = await computeUmap()
+    res.json(result)
   } catch (err) {
     res.status(500).json({ error: (err as Error).message })
   }

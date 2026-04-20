@@ -326,6 +326,42 @@ export async function getTagById(tagId: number): Promise<(Tag & { embedding_text
   return result.rows[0] ?? null
 }
 
+// Get all links with their embeddings (for UMAP)
+export async function getAllLinksWithEmbeddings(): Promise<Array<{
+  id: number
+  url: string
+  title: string
+  og_description: string | null
+  og_image: string | null
+  embedding_text: string
+}>> {
+  const result = await pool.query(
+    `SELECT id, url, title, og_description, og_image, embedding::text as embedding_text
+     FROM linkworld.links
+     WHERE embedding IS NOT NULL
+     ORDER BY id`
+  )
+  return result.rows
+}
+
+// Get tags for multiple links in one query (for UMAP bulk fetching)
+export async function getTagsForLinks(linkIds: number[]): Promise<Record<number, Tag[]>> {
+  if (linkIds.length === 0) return {}
+  const result = await pool.query<{ link_id: number; id: number; name: string; created_at: Date }>(
+    `SELECT lt.link_id, t.id, t.name, t.created_at
+     FROM linkworld.tags t
+     JOIN linkworld.link_tags lt ON lt.tag_id = t.id
+     WHERE lt.link_id = ANY($1)`,
+    [linkIds]
+  )
+  const map: Record<number, Tag[]> = {}
+  for (const row of result.rows) {
+    if (!map[row.link_id]) map[row.link_id] = []
+    map[row.link_id].push({ id: row.id, name: row.name, created_at: row.created_at, embedding: null })
+  }
+  return map
+}
+
 // Find links semantically similar to a tag's embedding
 export async function findLinksSimilarToTag(
   tagEmbedding: number[],
